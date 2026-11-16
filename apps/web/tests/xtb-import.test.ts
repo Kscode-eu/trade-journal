@@ -27,12 +27,9 @@ const upload = (mode: "preview" | "commit", bytes: Uint8Array, extra: object = {
     timeZone: "Europe/Bucharest",
     ...extra,
   });
-const state = () => ({
-  executions: db.select().from(executions).all().length,
-  trades: db
-    .select()
-    .from(trades)
-    .all()
+const state = async () => ({
+  executions: (await db.select().from(executions)).length,
+  trades: (await db.select().from(trades))
     .map((trade) => [trade.status, trade.openQuantity, trade.netPnl])
     .sort(),
 });
@@ -65,16 +62,15 @@ const holdings = xtbWorkbook(ACCOUNT, { open: lots });
 const later = (closed: ClosedLot) =>
   xtbWorkbook(ACCOUNT, { closed: [closed], open: lots.slice(1) });
 
-beforeEach(() => {
-  db.delete(trades).run();
-  db.delete(executions).run();
-  db.delete(accounts).run();
-  db.insert(accounts)
-    .values({ id: "xtb", name: "XTB", kind: "import", createdAt: "2026-01-01" })
-    .run();
+beforeEach(async () => {
+  await db.delete(trades);
+  await db.delete(executions);
+  await db.delete(accounts);
+  await db
+    .insert(accounts)
+    .values({ id: "xtb", name: "XTB", kind: "import", createdAt: "2026-01-01" });
 });
 afterAll(() => {
-  db.$client.close();
   vi.unstubAllEnvs();
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -92,7 +88,7 @@ describe("XTB .xlsx upload (#42)", () => {
       inserted: 0,
       duplicates: 2,
     });
-    expect(state()).toEqual({
+    expect(await state()).toEqual({
       executions: 2,
       trades: [
         ["open", 0.3, 0],
@@ -105,7 +101,7 @@ describe("XTB .xlsx upload (#42)", () => {
     await upload("commit", holdings);
     const result = await (await upload("commit", later(close(lots[0]!)))).json();
     expect(result).toMatchObject({ inserted: 1, duplicates: 2 });
-    expect(state()).toEqual({
+    expect(await state()).toEqual({
       executions: 3,
       trades: [
         ["open", 0.3, 0],
@@ -126,7 +122,7 @@ describe("XTB .xlsx upload (#42)", () => {
       inserted: 1,
       duplicates: 2,
     });
-    expect(state().trades).toEqual([
+    expect((await state()).trades).toEqual([
       ["open", 0.3, 0],
       ["win", 0, 45],
     ]);
@@ -134,20 +130,20 @@ describe("XTB .xlsx upload (#42)", () => {
 
   it("refuses a later close that changes the lot instead of booking a phantom position", async () => {
     await upload("commit", holdings);
-    const before = state();
+    const before = await state();
     const partial = later(close(lots[0]!, { volume: 2, net: 20, gross: 20 }));
     const preview = await (await upload("preview", partial)).json();
     expect(preview.errors.join(" ")).toMatch(/XTB position 3000000002 was imported earlier/);
     const response = await upload("commit", partial);
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/partial close.*Nothing was saved/);
-    expect(state()).toEqual(before);
+    expect(await state()).toEqual(before);
   });
 
   it("refuses AI parsing, column mapping and oversized or non-workbook uploads", async () => {
     const statuses = await Promise.all([
-      upload("preview", holdings, { ai: { provider: "openai", model: "test" } }),
-      upload("preview", holdings, { mapping: { symbol: "Ticker" } }),
+      await upload("preview", holdings, { ai: { provider: "openai", model: "test" } }),
+      await upload("preview", holdings, { mapping: { symbol: "Ticker" } }),
       post({ mode: "preview", content: "not base64!", encoding: "xlsx" }),
       post({
         mode: "preview",
@@ -169,6 +165,6 @@ describe("XTB .xlsx upload (#42)", () => {
       expect.stringMatching(/not an \.xlsx workbook/),
       expect.stringMatching(/5 MB or less/),
     ]);
-    expect(state().executions).toBe(0);
+    expect((await state()).executions).toBe(0);
   });
 });

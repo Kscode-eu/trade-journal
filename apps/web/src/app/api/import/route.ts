@@ -59,7 +59,7 @@ export const POST = handler(async (request: Request) => {
     return bad("Invalid filename");
   if (body.timeZone !== undefined)
     requireValue(isTimeZone(body.timeZone), "Enter a valid IANA statement timezone.");
-  const timeZone = body.timeZone ?? getImportTimeZone();
+  const timeZone = body.timeZone ?? (await getImportTimeZone());
   requireValue(
     body.encoding === undefined || ["text", "pdf", "xlsx"].includes(body.encoding),
     "Unsupported file encoding.",
@@ -106,15 +106,15 @@ export const POST = handler(async (request: Request) => {
 
   const syncProblem =
     parsed.format === IBKR_FLEX_XML.id && body.accountId
-      ? flexUploadSyncProblem(body.accountId, timeZone)
+      ? await flexUploadSyncProblem(body.accountId, timeZone)
       : null;
   const xtb =
     parsed.format === "xtb" && body.accountId
-      ? reconcileXtbHoldings(body.accountId, parsed.executions as ImportedExecution[])
+      ? await reconcileXtbHoldings(body.accountId, parsed.executions as ImportedExecution[])
       : null;
   const hyperliquid =
     parsed.format === HYPERLIQUID_FORMAT_ID && body.accountId
-      ? reconcileHyperliquidSync(body.accountId, parsed.executions as ImportedExecution[])
+      ? await reconcileHyperliquidSync(body.accountId, parsed.executions as ImportedExecution[])
       : null;
   // The preview then counts only the fills that will be saved.
   if (hyperliquid) parsed.executions = hyperliquid.executions;
@@ -165,7 +165,13 @@ export const POST = handler(async (request: Request) => {
       needsSymbol: parsed.needsSymbol,
       reconciliation:
         parsed.format === "ninjatrader" && body.accountId
-          ? previewNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
+          ? await previewNinjaTraderImport(
+              body.accountId,
+              parsed,
+              body.content,
+              timeZone,
+              body.review,
+            )
           : undefined,
     });
   }
@@ -175,8 +181,8 @@ export const POST = handler(async (request: Request) => {
   if (parsed.executions.length === 0) return bad("No executions to import");
   const result =
     parsed.format === "ninjatrader"
-      ? commitNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
-      : insertExecutions(
+      ? await commitNinjaTraderImport(body.accountId, parsed, body.content, timeZone, body.review)
+      : await insertExecutions(
           body.accountId,
           xtb?.executions ?? (parsed.executions as ImportedExecution[]),
           "import",

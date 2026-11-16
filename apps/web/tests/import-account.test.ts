@@ -31,7 +31,7 @@ it("creates an import destination with the chosen currency/balance and accepts f
   expect(listed.accounts).toMatchObject([
     { id, name: "Import verification", kind: "import", currency: "USD", initialBalance: 50000 },
   ]);
-  insertExecutions(
+  await insertExecutions(
     id,
     [
       {
@@ -55,14 +55,13 @@ it("creates an import destination with the chosen currency/balance and accepts f
     ],
     "import",
   );
-  expect(db.select().from(executions).all()).toHaveLength(2);
-  expect(db.select().from(trades).all()).toMatchObject([
+  expect(await db.select().from(executions)).toHaveLength(2);
+  expect(await db.select().from(trades)).toMatchObject([
     { accountId: id, status: "win", netPnl: 9.3 },
   ]);
 });
 
 afterAll(() => {
-  db.$client.close();
   vi.unstubAllEnvs();
   if (previous === undefined) delete process.env.JOURNAL_DATA_DIR;
   else process.env.JOURNAL_DATA_DIR = previous;

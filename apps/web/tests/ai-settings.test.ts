@@ -23,8 +23,8 @@ const request = (body: unknown) =>
 const save = (body: unknown) => PATCH(request(body));
 const state = async () => (await GET()).json();
 
-beforeEach(() => {
-  db.delete(settings).run();
+beforeEach(async () => {
+  await db.delete(settings);
   vi.stubEnv("ANTHROPIC_API_KEY", "");
   vi.stubEnv("OPENAI_API_KEY", "");
   vi.stubEnv("JOURNAL_PASSWORD", "");
@@ -41,7 +41,6 @@ afterEach(() => {
   vi.useRealTimers();
 });
 afterAll(() => {
-  db.$client.close();
   if (originalDir === undefined) delete process.env.JOURNAL_DATA_DIR;
   else process.env.JOURNAL_DATA_DIR = originalDir;
   rmSync(scratch, { recursive: true, force: true });
@@ -62,7 +61,7 @@ describe("AI provider settings", () => {
     expect(
       (await save({ anthropicKey: "fixture-anthropic", aiModel: "claude-custom" })).status,
     ).toBe(200);
-    expect(getAiProvider()).toBe("anthropic");
+    expect(await getAiProvider()).toBe("anthropic");
     expect(
       (await save({ aiProvider: "openai", openaiKey: "  fixture-openai  ", aiModel: "gpt-4.1" }))
         .status,
@@ -72,12 +71,12 @@ describe("AI provider settings", () => {
       aiConfigured: true,
       aiModel: "gpt-4.1",
     });
-    expect(getAiKey("anthropic")).toBe("fixture-anthropic");
-    expect(getAiKey("openai")).toBe("fixture-openai");
+    expect(await getAiKey("anthropic")).toBe("fixture-anthropic");
+    expect(await getAiKey("openai")).toBe("fixture-openai");
     await save({ aiProvider: "anthropic" });
-    expect(getAiModel("anthropic")).toBe("claude-custom");
+    expect(await getAiModel("anthropic")).toBe("claude-custom");
     await save({ aiProvider: "openai" });
-    expect(getAiModel("openai")).toBe("gpt-4.1");
+    expect(await getAiModel("openai")).toBe("gpt-4.1");
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -89,14 +88,14 @@ describe("AI provider settings", () => {
       compatibleKey: "fixture-private-compatible",
       compatibleBaseUrl: "http://localhost:11434/v1",
     });
-    const rows = JSON.stringify(db.select().from(settings).all());
+    const rows = JSON.stringify(await db.select().from(settings));
     expect(rows).not.toContain("fixture-private");
     const exported = await exportData(new Request("http://localhost/api/export"));
     for (const body of [await response.text(), await (await GET()).text(), await exported.text()]) {
       expect(body).not.toContain("fixture-private");
-      expect(body).not.toContain(getSetting("openaiKeyEnc")!);
-      expect(body).not.toContain(getSetting("anthropicKeyEnc")!);
-      expect(body).not.toContain(getSetting("compatibleKeyEnc")!);
+      expect(body).not.toContain((await getSetting("openaiKeyEnc"))!);
+      expect(body).not.toContain((await getSetting("anthropicKeyEnc"))!);
+      expect(body).not.toContain((await getSetting("compatibleKeyEnc"))!);
     }
   });
 
@@ -107,9 +106,9 @@ describe("AI provider settings", () => {
       anthropicKey: "fixture-anthropic",
     });
     await save({ openaiKey: null });
-    expect(getAiKey("anthropic")).toBe("fixture-anthropic");
-    expect(getAiKey("openai")).toBeNull();
-    expect(aiConfigured()).toBe(false);
+    expect(await getAiKey("anthropic")).toBe("fixture-anthropic");
+    expect(await getAiKey("openai")).toBeNull();
+    expect(await aiConfigured()).toBe(false);
     await expect(runAi("Fixture")).rejects.toThrow("OpenAI API key");
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -122,9 +121,9 @@ describe("AI provider settings", () => {
       aiConnections: { openai: { configured: true, source: "environment" } },
     });
     vi.stubEnv("ANTHROPIC_API_KEY", "fixture-env-anthropic");
-    expect(getAiProvider()).toBe("anthropic");
+    expect(await getAiProvider()).toBe("anthropic");
     await save({ aiProvider: "openai", aiModel: "gpt-4.1" });
-    expect(getAiProvider()).toBe("openai");
+    expect(await getAiProvider()).toBe("openai");
   });
 
   it.each(["openai", "anthropic"] as const)(
@@ -132,7 +131,7 @@ describe("AI provider settings", () => {
     async (provider) => {
       await save({ [`${provider}Key`]: "fixture-saved" });
       vi.stubEnv(provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY", "fixture-env");
-      expect(getAiKey(provider)).toBe("fixture-env");
+      expect(await getAiKey(provider)).toBe("fixture-env");
       for (const key of [null, "fixture-replacement"])
         expect((await save({ [`${provider}Key`]: key })).status).toBe(400);
       expect((await save({ aiProvider: provider, aiModel: "custom-text-model" })).status).toBe(200);
@@ -153,14 +152,14 @@ describe("AI provider settings", () => {
       ]),
     ]) {
       expect((await save({ timeZone: "America/Jamaica", ...invalid })).status).toBe(400);
-      expect(db.select().from(settings).all()).toHaveLength(0);
+      expect(await db.select().from(settings)).toHaveLength(0);
     }
     for (const body of [null, [], 42]) expect((await save(body)).status).toBe(400);
   });
 
   it("treats unreadable saved credentials as unconfigured", async () => {
-    setSetting("openaiKeyEnc", "broken-envelope");
-    setSetting("aiProvider", "openai");
+    await setSetting("openaiKeyEnc", "broken-envelope");
+    await setSetting("aiProvider", "openai");
     expect(await state()).toMatchObject({
       aiConfigured: false,
       aiConnections: { openai: { source: null } },
@@ -171,7 +170,7 @@ describe("AI provider settings", () => {
     vi.stubEnv("JOURNAL_PASSWORD", "fixture-password");
     expect((await GET()).status).toBe(401);
     expect((await save({ openaiKey: "fixture-key" })).status).toBe(401);
-    expect(getAiKey("openai")).toBeNull();
+    expect(await getAiKey("openai")).toBeNull();
   });
 });
 
@@ -202,7 +201,7 @@ describe("OpenAI-compatible provider", () => {
         openai: { model: "gpt-4.1-mini", baseUrl: null },
       },
     });
-    expect(aiConfigured()).toBe(true);
+    expect(await aiConfigured()).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -226,20 +225,20 @@ describe("OpenAI-compatible provider", () => {
     const router = "https://router.example/api/v1";
     await save({ ...local, compatibleBaseUrl: router, compatibleKey: "fixture-router-key" });
     await save({ compatibleBaseUrl: `${router}/` });
-    expect(getAiKey("compatible")).toBe("fixture-router-key");
+    expect(await getAiKey("compatible")).toBe("fixture-router-key");
     const fetcher = vi.fn(async () => completion("Routed"));
     vi.stubGlobal("fetch", fetcher);
     await runAi("Fixture");
     const [, init] = (fetcher.mock.calls as unknown as [string, RequestInit][])[0]!;
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer fixture-router-key");
     await save({ compatibleBaseUrl: "https://elsewhere.example/v1" });
-    expect(getAiKey("compatible")).toBeNull();
+    expect(await getAiKey("compatible")).toBeNull();
     expect(await state()).toMatchObject({
       aiConfigured: true,
       aiConnections: { compatible: { source: null, baseUrl: "https://elsewhere.example/v1" } },
     });
     await save({ compatibleBaseUrl: router, compatibleKey: "fixture-new-key" });
-    expect(getAiKey("compatible")).toBe("fixture-new-key");
+    expect(await getAiKey("compatible")).toBe("fixture-new-key");
   });
 
   it("rejects unusable server URLs before writing any settings", async () => {
@@ -257,7 +256,7 @@ describe("OpenAI-compatible provider", () => {
       null,
     ]) {
       expect((await save({ ...local, compatibleBaseUrl })).status).toBe(400);
-      expect(db.select().from(settings).all()).toHaveLength(0);
+      expect(await db.select().from(settings)).toHaveLength(0);
     }
   });
 
@@ -273,6 +272,7 @@ describe("OpenAI-compatible provider", () => {
       }),
     );
     const result = runAi("Fixture").catch((error) => error as Error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     await vi.runAllTimersAsync();
     const error = (await result) as Error;
     expect(error.message).toContain("AI server unreachable");
@@ -434,6 +434,7 @@ describe("AI provider requests through the real SDK adapters", () => {
       ),
     );
     const result = runAi("Fixture").catch((error) => error as Error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     await vi.runAllTimersAsync();
     expect(((await result) as Error).message).toContain("AI rate limit");
   });

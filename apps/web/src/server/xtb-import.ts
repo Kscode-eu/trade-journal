@@ -44,18 +44,17 @@ const describe = (fill: ImportedExecution) =>
  * whose size or side changed (for example a partial close) is refused, because
  * which part was closed cannot be known. Nothing is saved in that case.
  */
-export const reconcileXtbHoldings = (
+export const reconcileXtbHoldings = async (
   accountId: string,
   incoming: ImportedExecution[],
-): { executions: ImportedExecution[]; matched: number; problem: string | null } => {
+): Promise<{ executions: ImportedExecution[]; matched: number; problem: string | null }> => {
   const entries = incoming.filter(isXtbEntry);
   if (!entries.length) return { executions: incoming, matched: 0, problem: null };
   const stored = new Map<string, { fill: ImportedExecution; hash: string }>();
-  for (const row of db
+  for (const row of await db
     .select()
     .from(executions)
-    .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
-    .all()) {
+    .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))) {
     const importMetadata = row.importMetadataJson ? JSON.parse(row.importMetadataJson) : undefined;
     const fill: ImportedExecution = {
       symbol: row.symbol,

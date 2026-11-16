@@ -1,4 +1,4 @@
-# Self-hosted trade journal — single container, SQLite on a volume.
+# Self-hosted trade journal — app container with a PostgreSQL service.
 FROM node:22-slim AS builder
 RUN corepack enable
 WORKDIR /repo

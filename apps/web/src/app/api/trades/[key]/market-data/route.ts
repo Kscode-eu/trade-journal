@@ -13,16 +13,16 @@ import { estimateFingerprint, saveEstimate, savedEstimates } from "@/server/mark
 export const GET = handler(
   async (_request: Request, { params }: { params: Promise<{ key: string }> }) => {
     const { key } = await params;
-    const row = getTradeByKey(key);
+    const row = await getTradeByKey(key);
     if (!row) return bad("Trade not found", 404);
-    return ok({ saved: savedEstimates([rowToTrade(row)]).get(key) ?? null });
+    return ok({ saved: (await savedEstimates([await rowToTrade(row)])).get(key) ?? null });
   },
 );
 
 export const POST = handler(
   async (request: Request, { params }: { params: Promise<{ key: string }> }) => {
     const { key } = await params;
-    const row = getTradeByKey(key);
+    const row = await getTradeByKey(key);
     if (!row) return bad("Trade not found", 404);
     const body = await request.json();
     requireValue(body && typeof body.provider === "string", "Choose a market data provider.");
@@ -76,8 +76,8 @@ export const POST = handler(
           row.assetClass == null || ["forex", "cfd"].includes(row.assetClass),
           "OANDA supports forex and CFD instruments.",
         );
-      const trade = rowToTrade(row);
-      const fingerprint = estimateFingerprint(trade);
+      const trade = await rowToTrade(row);
+      const fingerprint = await estimateFingerprint(trade);
       const history = await provider.history(
         {
           symbol: body.symbol.trim(),
@@ -87,17 +87,18 @@ export const POST = handler(
           to,
           signal: request.signal,
         },
-        connectionKey(provider.id),
+        await connectionKey(provider.id),
       );
-      const accountCurrency = db
-        .select({ currency: accounts.currency })
-        .from(accounts)
-        .where(eq(accounts.id, row.accountId))
-        .get()?.currency;
+      const accountCurrency = (
+        await db
+          .select({ currency: accounts.currency })
+          .from(accounts)
+          .where(eq(accounts.id, row.accountId))
+      )[0]?.currency;
       const currencyMatches = !history.quoteCurrency || history.quoteCurrency === accountCurrency;
       const estimate = estimateExcursions(
         trade,
-        listExecutions(row.accountId, trade.executionIds),
+        await listExecutions(row.accountId, trade.executionIds),
         history,
         body.basisConfirmed === true && currencyMatches,
       );
@@ -105,9 +106,9 @@ export const POST = handler(
         estimate.warnings.unshift(
           `The candle quote currency (${history.quoteCurrency}) differs from this account (${accountCurrency}). Monetary estimates are unavailable; no FX conversion is applied.`,
         );
-      const current = getTradeByKey(key);
-      if (current && estimateFingerprint(rowToTrade(current)) === fingerprint)
-        saveEstimate(trade, { ...history, estimate }, fingerprint);
+      const current = await getTradeByKey(key);
+      if (current && (await estimateFingerprint(await rowToTrade(current))) === fingerprint)
+        await saveEstimate(trade, { ...history, estimate }, fingerprint);
       if (body.estimateOnly) {
         const { bars: _bars, ...metadata } = history;
         return ok({ ...metadata, estimate });

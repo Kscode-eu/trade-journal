@@ -96,11 +96,11 @@ Preview validates the whole file, shows counts and the first five rows, and roll
 
 Maximum file size is 2 MB, with 1,000 rows per batch. Convert a bank or firm export to this documented schema first; this release does not claim to recognize arbitrary bank CSVs. Pending payout requests and reversals use the manual forms.
 
-**Export cash CSV** downloads the filtered actual cash movements, including reversals, with their entry/account IDs and references. It is an analysis export with a different schema from the import template. **Settings → Data & backups → Full backup (JSON)** includes all prop accounts, entries, receipts and the complete audit trail, including archived/voided records. Attachment metadata is included; the attachment binaries require the existing full data-directory backup. JSON is an export format; this release does not add a general backup-restore importer.
+**Export cash CSV** downloads the filtered actual cash movements, including reversals, with their entry/account IDs and references. It is an analysis export with a different schema from the import template. **Settings → Data & backups → Full backup (JSON)** includes all prop accounts, entries, receipts and the complete audit trail, including archived/voided records. Attachment metadata is included; the attachment binaries require a full PostgreSQL backup. JSON is an export format; this release does not add a general backup-restore importer.
 
 ## Implementation and reliability
 
-- Four additive SQLite tables: `prop_accounts`, `prop_entries`, `prop_receipts`, `prop_audit`. Foreign keys protect account/entry relationships; removing a linked journal account clears the optional link without deleting prop history.
+- Four additive PostgreSQL tables: `prop_accounts`, `prop_entries`, `prop_receipts`, `prop_audit`. Foreign keys protect account/entry relationships; removing a linked journal account clears the optional link without deleting prop history.
 - All mutations are transactions. Server validation enforces currency, amount, status, date, lineage, refund and receipt constraints independently of the UI.
 - Account and entry revisions prevent stale edits overwriting another view's changes. Receipt mutations also increment/check the parent payout revision. New-record requests carry stable IDs for safe retry.
 - Refunds cannot exceed the original charge. An expense with active refunds cannot be voided. Receipt corrections cannot produce a negative received balance at any historical date. A paid payout cannot be cancelled/rejected while it retains net cash receipts.

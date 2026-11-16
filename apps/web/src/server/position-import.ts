@@ -23,14 +23,15 @@ const facts = (fill: ImportedExecution) =>
   ]);
 
 /** Validate the combined, deduplicated history inside the insertion transaction. */
-export function positionImportErrors(accountId: string, incoming: ImportedExecution[]): string[] {
+export async function positionImportErrors(
+  accountId: string,
+  incoming: ImportedExecution[],
+): Promise<string[]> {
   if (!incoming.length) return [];
   const symbols = new Set(incoming.map((fill) => fill.symbol));
-  const existing: ImportedExecution[] = db
-    .select()
-    .from(executions)
-    .where(eq(executions.accountId, accountId))
-    .all()
+  const existing: ImportedExecution[] = (
+    await db.select().from(executions).where(eq(executions.accountId, accountId))
+  )
     .filter((row) => symbols.has(row.symbol))
     .map((row) => ({
       symbol: row.symbol,

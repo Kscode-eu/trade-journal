@@ -19,13 +19,13 @@ import { AI_PROVIDERS, AI_PROVIDER_NAMES, isAiProvider, type AiProvider } from "
 import { isTimeZone } from "@/lib/timezone";
 import { parseCurrencyConversion, type CurrencyConversion } from "@/lib/currencies";
 
-export const GET = handler(() =>
+export const GET = handler(async () =>
   ok({
-    timeZone: getTimeZone(),
-    importTimeZone: getImportTimeZone(),
-    multipliers: getMultipliers(),
-    currencyConversion: getCurrencyConversion(),
-    ...getAiSettings(),
+    timeZone: await getTimeZone(),
+    importTimeZone: await getImportTimeZone(),
+    multipliers: await getMultipliers(),
+    currencyConversion: await getCurrencyConversion(),
+    ...(await getAiSettings()),
   }),
 );
 
@@ -57,11 +57,9 @@ export const PATCH = handler(async (request: Request) => {
     if (conversion.enabled) {
       const missing = [
         ...new Set(
-          db
-            .select({ currency: accounts.currency })
-            .from(accounts)
-            .all()
-            .map((account) => account.currency),
+          (await db.select({ currency: accounts.currency }).from(accounts)).map(
+            (account) => account.currency,
+          ),
         ),
       ].filter(
         (currency) => currency !== conversion!.reportingCurrency && !conversion!.rates[currency],
@@ -77,7 +75,7 @@ export const PATCH = handler(async (request: Request) => {
       isAiProvider(body.aiProvider),
       "Choose Anthropic, OpenAI or an OpenAI-compatible server.",
     );
-  const provider = body.aiProvider ?? getAiProvider();
+  const provider = body.aiProvider ?? (await getAiProvider());
   const compatibleBaseUrl =
     body.compatibleBaseUrl === undefined
       ? undefined
@@ -125,28 +123,28 @@ export const PATCH = handler(async (request: Request) => {
         ),
       "Contract multipliers must be positive numbers.",
     );
-  db.transaction(() => {
+  await db.transaction(async () => {
     // A display-only change must not silently alter the legacy import default.
-    if (conversion) setSetting("currencyConversion", JSON.stringify(conversion));
+    if (conversion) await setSetting("currencyConversion", JSON.stringify(conversion));
     if (body.timeZone !== undefined || body.importTimeZone !== undefined)
-      setSetting("importTimeZone", body.importTimeZone ?? getImportTimeZone());
-    if (body.timeZone !== undefined) setSetting("timeZone", body.timeZone);
+      await setSetting("importTimeZone", body.importTimeZone ?? (await getImportTimeZone()));
+    if (body.timeZone !== undefined) await setSetting("timeZone", body.timeZone);
   });
   if (body.multipliers !== undefined)
-    db.transaction(() => {
-      setSetting("multipliers", JSON.stringify(body.multipliers));
-      for (const account of db.select({ id: accounts.id }).from(accounts).all())
-        rebuildAccount(account.id);
+    await db.transaction(async () => {
+      await setSetting("multipliers", JSON.stringify(body.multipliers));
+      for (const account of await db.select({ id: accounts.id }).from(accounts))
+        await rebuildAccount(account.id);
     });
-  db.transaction(() => {
+  await db.transaction(async () => {
     for (const id of AI_PROVIDERS) {
       const key = body[`${id}Key`];
-      if (key !== undefined) setAiKey(id, key);
+      if (key !== undefined) await setAiKey(id, key);
     }
     if (compatibleBaseUrl)
-      setCompatibleBaseUrl(compatibleBaseUrl, body.compatibleKey !== undefined);
-    if (body.aiProvider !== undefined) setSetting("aiProvider", body.aiProvider);
-    if (body.aiModel !== undefined) setSetting(aiModelSetting(provider), body.aiModel.trim());
+      await setCompatibleBaseUrl(compatibleBaseUrl, body.compatibleKey !== undefined);
+    if (body.aiProvider !== undefined) await setSetting("aiProvider", body.aiProvider);
+    if (body.aiModel !== undefined) await setSetting(aiModelSetting(provider), body.aiModel.trim());
   });
   return ok({ saved: true });
 });

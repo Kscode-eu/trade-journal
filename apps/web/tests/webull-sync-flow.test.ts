@@ -23,21 +23,19 @@ const order = (fields: Record<string, unknown>) => ({
 let orders: Record<string, unknown>[] = [];
 let positions: Record<string, unknown>[] = [];
 
-beforeEach(() => {
-  db.delete(trades).run();
-  db.delete(executions).run();
-  db.delete(accounts).run();
-  db.delete(settings).run();
-  db.insert(accounts)
-    .values({
-      id: "wb",
-      name: "Webull",
-      kind: "sync",
-      broker: "webull",
-      credentialsEnc: encryptJson({ apiKey: "k", apiSecret: "s" }),
-      createdAt: "2026-01-01",
-    })
-    .run();
+beforeEach(async () => {
+  await db.delete(trades);
+  await db.delete(executions);
+  await db.delete(accounts);
+  await db.delete(settings);
+  await db.insert(accounts).values({
+    id: "wb",
+    name: "Webull",
+    kind: "sync",
+    broker: "webull",
+    credentialsEnc: encryptJson({ apiKey: "k", apiSecret: "s" }),
+    createdAt: "2026-01-01",
+  });
   orders = [];
   positions = [];
   vi.stubGlobal(
@@ -65,7 +63,6 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 afterAll(() => {
-  db.$client.close();
   vi.unstubAllEnvs();
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -84,7 +81,7 @@ describe("Webull sync", () => {
     const outcome = await syncAccount("wb");
     expect(outcome).toMatchObject({ inserted: 0, skipped: 1 });
     expect(outcome.skippedReasons.join(" ")).toContain("before the broker's available history");
-    expect(db.select().from(trades).all()).toEqual([]);
+    expect(await db.select().from(trades)).toEqual([]);
   });
 
   it("a close of shares partly bought before the history keeps the covered part, and later syncs leave it be", async () => {
@@ -116,7 +113,7 @@ describe("Webull sync", () => {
     expect(outcome.skippedReasons.join(" ")).toContain(
       "only the part that history covers was kept",
     );
-    const [trade] = db.select().from(trades).all();
+    const [trade] = await db.select().from(trades);
     expect(trade).toMatchObject({ status: "win", direction: "long", quantity: 1 });
     expect(trade!.grossPnl).toBeCloseTo(10, 9);
 
@@ -137,7 +134,7 @@ describe("Webull sync", () => {
 
     expect(await syncAccount("wb")).toMatchObject({ inserted: 2, skipped: 0 });
     expect(await syncAccount("wb")).toMatchObject({ inserted: 0, duplicates: 2, skipped: 0 });
-    expect(db.select().from(trades).all()).toMatchObject([
+    expect(await db.select().from(trades)).toMatchObject([
       { symbol: "ABC", status: "open", openQuantity: 2 },
     ]);
   });
@@ -166,7 +163,7 @@ describe("Webull sync", () => {
     ];
 
     expect(await syncAccount("wb")).toMatchObject({ inserted: 2 });
-    const [trade] = db.select().from(trades).all();
+    const [trade] = await db.select().from(trades);
     expect(trade).toMatchObject({ status: "loss", direction: "long" });
     expect(trade!.grossPnl).toBeCloseTo(-110, 9);
     // The next sync recomputes nothing: the expiry close is already journaled.

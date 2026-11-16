@@ -171,29 +171,27 @@ export interface DemoResult {
 }
 
 /** Idempotent: a second call returns the existing demo account untouched. */
-export const loadDemoData = (): DemoResult => {
-  const existing = db.select().from(accounts).where(eq(accounts.broker, DEMO_BROKER)).get();
+export const loadDemoData = async (): Promise<DemoResult> => {
+  const existing = (await db.select().from(accounts).where(eq(accounts.broker, DEMO_BROKER)))[0];
   if (existing) {
     if (existing.archivedAt)
-      db.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, existing.id)).run();
+      await db.update(accounts).set({ archivedAt: null }).where(eq(accounts.id, existing.id));
     return { accountId: existing.id, inserted: 0, alreadyLoaded: true };
   }
 
   const id = newId();
-  db.insert(accounts)
-    .values({
-      id,
-      name: "Demo data",
-      broker: DEMO_BROKER,
-      kind: "import",
-      currency: "USD",
-      initialBalance: 25000,
-      profitCalcMethod: "fifo",
-      credentialsEnc: null,
-      autoSync: false,
-      createdAt: nowIso(),
-    })
-    .run();
-  const { inserted } = insertExecutions(id, generateExecutions(), "import");
+  await db.insert(accounts).values({
+    id,
+    name: "Demo data",
+    broker: DEMO_BROKER,
+    kind: "import",
+    currency: "USD",
+    initialBalance: 25000,
+    profitCalcMethod: "fifo",
+    credentialsEnc: null,
+    autoSync: false,
+    createdAt: nowIso(),
+  });
+  const { inserted } = await insertExecutions(id, generateExecutions(), "import");
   return { accountId: id, inserted, alreadyLoaded: false };
 };

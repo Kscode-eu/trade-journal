@@ -13,7 +13,7 @@ class PreviewRollback extends Error {
 }
 type ImportResult = { imported: number; skipped: number; sample: Record<string, string>[] };
 /** Deliberately a generic settled-cash format; bank/firm CSVs need explicit mapping. */
-export function importPropCsv(content: string, preview: boolean): ImportResult {
+export async function importPropCsv(content: string, preview: boolean): Promise<ImportResult> {
   requireValue(Buffer.byteLength(content) <= 2 * 1024 * 1024, "CSV must be 2 MB or smaller.");
   requireValue(
     (content.match(/"/g)?.length ?? 0) % 2 === 0,
@@ -57,7 +57,7 @@ export function importPropCsv(content: string, preview: boolean): ImportResult {
     seen.add(row.id!);
   }
   try {
-    return db.transaction(() => {
+    return await db.transaction(async () => {
       let imported = 0,
         skipped = 0;
       for (const [index, row] of records.entries()) {
@@ -68,14 +68,15 @@ export function importPropCsv(content: string, preview: boolean): ImportResult {
           );
           const id = `csv-${hash(row.id!)}`,
             fingerprint = `CSV import ${hash(JSON.stringify(row))}`;
-          const old = db.select().from(propEntries).where(eq(propEntries.id, id)).get();
+          const old = (await db.select().from(propEntries).where(eq(propEntries.id, id)))[0];
           if (old) {
             requireValue(
-              db
-                .select({ id: propAudit.id })
-                .from(propAudit)
-                .where(and(eq(propAudit.entityId, id), eq(propAudit.reason, fingerprint)))
-                .get(),
+              (
+                await db
+                  .select({ id: propAudit.id })
+                  .from(propAudit)
+                  .where(and(eq(propAudit.entityId, id), eq(propAudit.reason, fingerprint)))
+              )[0],
               "This CSV ID was already imported with different data. Edit the existing record or use a new ID for a separate transaction.",
             );
             skipped++;
@@ -93,11 +94,12 @@ export function importPropCsv(content: string, preview: boolean): ImportResult {
             amount: row.amount,
             category: row.category,
             parentId: row.expense_id
-              ? db
-                  .select({ id: propEntries.id })
-                  .from(propEntries)
-                  .where(eq(propEntries.id, row.expense_id))
-                  .get()
+              ? (
+                  await db
+                    .select({ id: propEntries.id })
+                    .from(propEntries)
+                    .where(eq(propEntries.id, row.expense_id))
+                )[0]
                 ? row.expense_id
                 : `csv-${hash(row.expense_id)}`
               : null,
@@ -107,9 +109,9 @@ export function importPropCsv(content: string, preview: boolean): ImportResult {
             fee: "0",
             status: "requested",
           };
-          mutateProp(command);
+          await mutateProp(command);
           if (row.kind === "payout") {
-            mutateProp({
+            await mutateProp({
               action: "receipt.add",
               id: `${id}-cash`,
               payoutId: id,
@@ -120,24 +122,22 @@ export function importPropCsv(content: string, preview: boolean): ImportResult {
               reference: row.reference,
               notes: row.notes,
             });
-            mutateProp({
+            await mutateProp({
               ...command,
               revision: 2,
               status: "completed",
               reason: "Imported settled payout",
             });
           }
-          db.insert(propAudit)
-            .values({
-              id: newId(),
-              entityType: "entry",
-              entityId: id,
-              beforeJson: null,
-              afterJson: JSON.stringify(row),
-              reason: fingerprint,
-              createdAt: nowIso(),
-            })
-            .run();
+          await db.insert(propAudit).values({
+            id: newId(),
+            entityType: "entry",
+            entityId: id,
+            beforeJson: null,
+            afterJson: JSON.stringify(row),
+            reason: fingerprint,
+            createdAt: nowIso(),
+          });
           imported++;
         } catch (error) {
           throw new RequestError(`Row ${index + 2}: ${(error as Error).message}`);

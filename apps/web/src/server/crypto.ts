@@ -5,9 +5,9 @@ import { dataDir } from "@/db";
 
 /**
  * Broker credentials at rest are AES-256-GCM encrypted. The key comes from
- * JOURNAL_SECRET when set; otherwise a random key file is generated next to
- * the database — same trust boundary as the data it protects, so a copied
- * data directory keeps working while a leaked database file alone does not.
+ * JOURNAL_SECRET when set; otherwise a random key file is generated in
+ * JOURNAL_DATA_DIR. Preserve it alongside PostgreSQL backups so encrypted
+ * credentials remain readable after a restore.
  */
 const keyMaterial = (): Buffer => {
   const secret = process.env.JOURNAL_SECRET;

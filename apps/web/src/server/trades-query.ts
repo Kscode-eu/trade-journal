@@ -17,8 +17,15 @@ const parseJsonArray = (value: string | null): string[] => {
   }
 };
 
-const context = () => ({ multipliers: getMultipliers(), defaults: getJournalDefaults() });
-export const rowToTrade = (row: TradeRow, config = context()): AnnotatedTrade => {
+const context = async () => ({
+  multipliers: await getMultipliers(),
+  defaults: await getJournalDefaults(),
+});
+export const rowToTrade = async (
+  row: TradeRow,
+  config?: Awaited<ReturnType<typeof context>>,
+): Promise<AnnotatedTrade> => {
+  config ??= await context();
   const multiplier = config.multipliers[row.symbol];
   const defaults = config.defaults;
   const missingMultiplier =
@@ -75,15 +82,15 @@ export const rowToTrade = (row: TradeRow, config = context()): AnnotatedTrade =>
  * Narrow indexed identity fields before decoding rows. The core predicate
  * remains authoritative for timezone, risk and breakeven semantics.
  */
-export const queryTrades = (
+export const queryTrades = async (
   filters: TradeFilters = {},
-): { rows: TradeRow[]; trades: AnnotatedTrade[] } => {
+): Promise<{ rows: TradeRow[]; trades: AnnotatedTrade[] }> => {
   const effective = { ...filters, accounts: filters.accounts ?? filters.accountIds?.join(",") };
   const accountIds = effective.accounts
     ?.split(",")
     .map((id) => id.trim())
     .filter(Boolean);
-  const all = db
+  const all = await db
     .select()
     .from(trades)
     .where(
@@ -96,30 +103,29 @@ export const queryTrades = (
         effective.assetClass ? eq(trades.assetClass, effective.assetClass) : undefined,
       ),
     )
-    .orderBy(asc(trades.openedAt))
-    .all();
-  const timeZone = getTimeZone();
-  const config = context();
-  const pairs = all
-    .map((row) => ({ row, trade: rowToTrade(row, config) }))
-    .filter(({ trade }) => matchesFilters(trade, effective, timeZone));
+    .orderBy(asc(trades.openedAt));
+  const timeZone = await getTimeZone();
+  const config = await context();
+  const pairs = (
+    await Promise.all(all.map(async (row) => ({ row, trade: await rowToTrade(row, config) })))
+  ).filter(({ trade }) => matchesFilters(trade, effective, timeZone));
   return {
     rows: pairs.map(({ row, trade }) => ({ ...row, status: trade.status })),
     trades: pairs.map((p) => p.trade),
   };
 };
 
-export const getTradeByKey = (key: string): TradeRow | undefined =>
-  db.select().from(trades).where(eq(trades.key, key)).get();
+export const getTradeByKey = async (key: string): Promise<TradeRow | undefined> =>
+  (await db.select().from(trades).where(eq(trades.key, key)))[0];
 
 /** Navigate chronologically within the active filters, with a stable tie-break for equal entries. */
-export const getAdjacentTradeKeys = (
+export const getAdjacentTradeKeys = async (
   currentKey: string,
   filters: TradeFilters = {},
   accountId?: string,
 ) => {
-  const ordered = queryTrades(filters)
-    .trades.filter((trade) => !accountId || trade.accountId === accountId)
+  const ordered = (await queryTrades(filters)).trades
+    .filter((trade) => !accountId || trade.accountId === accountId)
     .sort((a, b) => {
       const time = Date.parse(a.openedAt) - Date.parse(b.openedAt);
       return time || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);

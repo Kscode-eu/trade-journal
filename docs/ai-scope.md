@@ -20,7 +20,7 @@ Successful responses retain `answer` or `recap` and add `scope: { label, timeZon
 
 Run `pnpm test apps/web/tests/ai-scope.test.ts apps/web/tests/ai-ui.test.ts apps/web/tests/ai-feedback.test.ts`.
 
-The route tests use an isolated SQLite database and replace only `runAi`, recording the exact context from the real handlers. The fixture has Account A at +10 and Account B at -50; A alone must contain no B trade data, while a combined selection reports -40 and the separate account totals. Tests cover each supported filter, invalid selections, empty results, local-midnight boundaries, overnight time windows, shared notes and single-trade critique.
+The route tests use an isolated PostgreSQL schema and replace only `runAi`, recording the exact context from the real handlers. The fixture has Account A at +10 and Account B at -50; A alone must contain no B trade data, while a combined selection reports -40 and the separate account totals. Tests cover each supported filter, invalid selections, empty results, local-midnight boundaries, overnight time windows, shared notes and single-trade critique.
 
 The React DOM tests use controlled delayed responses to exercise the actual Ask component and daily journal page. They verify outgoing filter snapshots, scope labels, account/date/timezone changes, returning to an earlier scope, obsolete errors, duplicate clicks, retries, unmounting and edits made while a recap is pending.
 

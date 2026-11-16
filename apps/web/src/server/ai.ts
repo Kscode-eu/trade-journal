@@ -16,7 +16,8 @@ import { AI_PROVIDER_NAMES, type AiProvider } from "@/lib/ai-settings";
  * encrypted settings store (or the selected provider's environment variable).
  * Requests go straight from this server to the selected provider.
  */
-export const aiConfigured = (): boolean => aiProviderConfigured(getAiProvider());
+export const aiConfigured = async (): Promise<boolean> =>
+  await aiProviderConfigured(await getAiProvider());
 
 const SYSTEM = `You are the reflection layer of a trader's journal.
 You see only the trader's own recorded data — trades, stats, and notes. Ground every
@@ -25,13 +26,13 @@ Be direct and specific like a good trading coach: name the behavior, cite the nu
 say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
 the trader knows. Keep it tight.`;
 
-const languageModel = (provider: AiProvider, apiKey: string | null, model: string) => {
+const languageModel = async (provider: AiProvider, apiKey: string | null, model: string) => {
   if (provider === "compatible")
     // Chat Completions is the API compatible servers share. Only the key saved for
     // this server is sent: this adapter never reads provider environment variables.
     return createOpenAICompatible({
       name: "compatible",
-      baseURL: getCompatibleBaseUrl()!,
+      baseURL: (await getCompatibleBaseUrl())!,
       apiKey: apiKey ?? undefined,
     })(model);
   return provider === "openai"
@@ -40,8 +41,8 @@ const languageModel = (provider: AiProvider, apiKey: string | null, model: strin
 };
 
 export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<string> => {
-  const provider = getAiProvider();
-  if (!aiProviderConfigured(provider)) {
+  const provider = await getAiProvider();
+  if (!(await aiProviderConfigured(provider))) {
     throw new Error(
       provider === "compatible"
         ? "AI is not configured — add your OpenAI-compatible server URL and model in Settings."
@@ -50,7 +51,7 @@ export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<str
   }
   try {
     const result = await generateText({
-      model: languageModel(provider, getAiKey(provider), getAiModel(provider)),
+      model: await languageModel(provider, await getAiKey(provider), await getAiModel(provider)),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
       system: SYSTEM,
       prompt,

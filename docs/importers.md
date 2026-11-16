@@ -298,8 +298,8 @@ combine synced history with unknown or incompatible timezone provenance.
 
 To recover affected history:
 
-1. Stop the app and copy the **entire data directory**, including `journal.db`,
-   encryption key and attachments, as described in [Export and backup](../README.md#export-and-backup).
+1. Stop the app, back up **PostgreSQL and the data directory**, including the
+   encryption key, as described in [Export and backup](../README.md#export-and-backup).
    Keep that backup and the original Flex report.
 2. Restart the app and select the verified statement timezone in
    **Settings → General → Default import timezone**.

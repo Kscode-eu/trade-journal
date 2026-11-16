@@ -18,17 +18,17 @@ const fillKey = (fill: Pick<ImportedExecution, "symbol" | "side" | "quantity" | 
  * statement timezone (or the wallet) is wrong, and the boundary would land in
  * the wrong place. Nothing is saved in that case.
  */
-export const reconcileHyperliquidSync = (
+export const reconcileHyperliquidSync = async (
   accountId: string,
   incoming: ImportedExecution[],
-): {
+): Promise<{
   executions: ImportedExecution[];
   covered: number;
   since: string | null;
   problem: string | null;
-} => {
+}> => {
   const unchanged = { executions: incoming, covered: 0, since: null, problem: null };
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  const account = (await db.select().from(accounts).where(eq(accounts.id, accountId)))[0];
   if (!account) return unchanged;
   if (account.kind === "sync" && account.broker !== "hyperliquid")
     return {
@@ -36,11 +36,10 @@ export const reconcileHyperliquidSync = (
       problem:
         "This account syncs from another broker. Import Hyperliquid history into its Hyperliquid account or into a separate journal account. Nothing was saved.",
     };
-  const synced = db
+  const synced = await db
     .select()
     .from(executions)
-    .where(and(eq(executions.accountId, accountId), eq(executions.source, "sync")))
-    .all();
+    .where(and(eq(executions.accountId, accountId), eq(executions.source, "sync")));
   if (!synced.length)
     return account.kind === "sync"
       ? {

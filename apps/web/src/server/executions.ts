@@ -105,20 +105,20 @@ export const partitionExecutions = (
 };
 
 /** Insert fills, rebuild trades, and attach optional manual notes in one transaction. */
-export const insertExecutions = (
+export const insertExecutions = async (
   accountId: string,
   rows: ImportedExecution[],
   source: ExecutionSource,
   manualNotes?: string,
   options: { preserveFees?: boolean } = {},
-): InsertResult => {
+): Promise<InsertResult> => {
   requireValue(
     manualNotes === undefined ||
       (source === "manual" && typeof manualNotes === "string" && manualNotes.length <= 100000),
     "Manual trade notes must be at most 100,000 characters.",
   );
   requireValue(
-    db.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)).get(),
+    (await db.select({ id: accounts.id }).from(accounts).where(eq(accounts.id, accountId)))[0],
     "Account not found.",
   );
   const { usable, skipped, skippedReasons } = partitionExecutions(rows, source);
@@ -129,20 +129,20 @@ export const insertExecutions = (
   let inserted = 0;
   let duplicates = 0;
   const createdAt = nowIso();
-  const defaults = getJournalDefaults();
+  const defaults = await getJournalDefaults();
   const note = manualNotes?.trim() ? manualNotes : undefined;
 
-  db.transaction((tx) => {
-    const positionErrors = positionImportErrors(accountId, usable);
+  await db.transaction(async (tx) => {
+    const positionErrors = await positionImportErrors(accountId, usable);
     requireValue(positionErrors.length === 0, positionErrors.join(" "));
     if (source === "import") {
       const existingHashes = new Set(
-        tx
-          .select({ hash: executions.contentHash })
-          .from(executions)
-          .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
-          .all()
-          .map((row) => row.hash),
+        (
+          await tx
+            .select({ hash: executions.contentHash })
+            .from(executions)
+            .where(and(eq(executions.accountId, accountId), eq(executions.source, "import")))
+        ).map((row) => row.hash),
       );
       for (const row of usable) {
         if (existingHashes.has(executionHash(row))) continue;
@@ -162,7 +162,7 @@ export const insertExecutions = (
     for (const row of usable) {
       const id = newId();
       const contentHash = executionHash(row);
-      const result = tx
+      const result = await tx
         .insert(executions)
         .values({
           id,
@@ -182,36 +182,35 @@ export const insertExecutions = (
           contentHash,
           createdAt,
         })
-        .onConflictDoNothing()
-        .run();
-      if (result.changes > 0) {
+        .onConflictDoNothing();
+      if ((result.rowCount ?? 0) > 0) {
         inserted++;
         if (note) noteExecutionIds.add(id);
       } else {
         duplicates++;
         if (note) {
-          const existing = tx
-            .select({ id: executions.id })
-            .from(executions)
-            .where(
-              and(eq(executions.accountId, accountId), eq(executions.contentHash, contentHash)),
-            )
-            .get();
+          const existing = (
+            await tx
+              .select({ id: executions.id })
+              .from(executions)
+              .where(
+                and(eq(executions.accountId, accountId), eq(executions.contentHash, contentHash)),
+              )
+          )[0];
           if (existing) noteExecutionIds.add(existing.id);
         }
       }
     }
-    if (inserted > 0) rebuildAccount(accountId);
+    if (inserted > 0) await rebuildAccount(accountId);
     if (note) {
-      const affected = tx
+      const affected = await tx
         .select({
           key: trades.key,
           notes: trades.notes,
           executionIdsJson: trades.executionIdsJson,
         })
         .from(trades)
-        .where(eq(trades.accountId, accountId))
-        .all();
+        .where(eq(trades.accountId, accountId));
       for (const trade of affected) {
         const ids = JSON.parse(trade.executionIdsJson) as string[];
         if (!ids.some((id) => noteExecutionIds.has(id))) continue;
@@ -223,7 +222,7 @@ export const insertExecutions = (
           notes.length <= 100000,
           "Combined trade notes must be at most 100,000 characters.",
         );
-        tx.update(trades).set({ notes }).where(eq(trades.key, trade.key)).run();
+        await tx.update(trades).set({ notes }).where(eq(trades.key, trade.key));
       }
     }
   });
@@ -231,21 +230,23 @@ export const insertExecutions = (
   return { inserted, duplicates, skipped, skippedReasons };
 };
 
-export const deleteExecutionsForTrades = (accountId: string, executionIds: string[]): void => {
+export const deleteExecutionsForTrades = async (
+  accountId: string,
+  executionIds: string[],
+): Promise<void> => {
   if (executionIds.length === 0) return;
-  db.delete(executions)
-    .where(and(eq(executions.accountId, accountId), inArray(executions.id, executionIds)))
-    .run();
-  rebuildAccount(accountId);
+  await db
+    .delete(executions)
+    .where(and(eq(executions.accountId, accountId), inArray(executions.id, executionIds)));
+  await rebuildAccount(accountId);
 };
 
-export const listExecutions = (accountId: string, ids?: string[]) => {
+export const listExecutions = async (accountId: string, ids?: string[]) => {
   if (ids && ids.length > 0) {
-    return db
+    return await db
       .select()
       .from(executions)
-      .where(and(eq(executions.accountId, accountId), inArray(executions.id, ids)))
-      .all();
+      .where(and(eq(executions.accountId, accountId), inArray(executions.id, ids)));
   }
-  return db.select().from(executions).where(eq(executions.accountId, accountId)).all();
+  return await db.select().from(executions).where(eq(executions.accountId, accountId));
 };

@@ -206,7 +206,7 @@ window reuse those pages. Other adapters keep their existing pagination and
 coverage checks. Provider outages, latency and plan quotas can still cause waits.
 
 CSV imports validate once per import. Dataset bounds and counts are materialized
-in SQLite, with an additive upgrade for existing files. History selects metadata
+in PostgreSQL, with an additive schema upgrade. History selects metadata
 first, decodes only the chosen file, then uses binary search to slice the requested
 range. At most 200,000 decoded candles are retained across immutable files. Removal
 invalidates the local cached file and its saved estimates. Large first-time CSV

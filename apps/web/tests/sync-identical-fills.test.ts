@@ -27,27 +27,25 @@ const opened = Date.UTC(2026, 9, 1, 9, 0, 0, 120);
 const closed = Date.UTC(2026, 9, 1, 10, 0, 0, 450);
 const reopened = Date.UTC(2026, 9, 1, 11, 0, 0, 900);
 const history = [
-  fill("A", "3000", "1", opened, 1),
-  fill("B", "2900", "0.5", closed, 2),
-  fill("B", "2900", "0.5", closed, 3),
-  fill("A", "2950", "1", reopened, 4),
+  await fill("A", "3000", "1", opened, 1),
+  await fill("B", "2900", "0.5", closed, 2),
+  await fill("B", "2900", "0.5", closed, 3),
+  await fill("A", "2950", "1", reopened, 4),
 ];
 let userFills = history;
 
-beforeEach(() => {
-  db.delete(trades).run();
-  db.delete(executions).run();
-  db.delete(accounts).run();
-  db.insert(accounts)
-    .values({
-      id: "hl",
-      name: "Hyperliquid",
-      kind: "sync",
-      broker: "hyperliquid",
-      credentialsEnc: encryptJson({ walletAddress: `0x${"1".repeat(40)}` }),
-      createdAt: "2026-01-01",
-    })
-    .run();
+beforeEach(async () => {
+  await db.delete(trades);
+  await db.delete(executions);
+  await db.delete(accounts);
+  await db.insert(accounts).values({
+    id: "hl",
+    name: "Hyperliquid",
+    kind: "sync",
+    broker: "hyperliquid",
+    credentialsEnc: encryptJson({ walletAddress: `0x${"1".repeat(40)}` }),
+    createdAt: "2026-01-01",
+  });
   userFills = history;
   vi.stubGlobal(
     "fetch",
@@ -63,23 +61,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 afterAll(() => {
-  db.$client.close();
   vi.unstubAllEnvs();
   rmSync(scratch, { recursive: true, force: true });
 });
 
-const journal = () =>
-  db
-    .select()
-    .from(trades)
-    .all()
-    .sort((a, b) => a.openedAt.localeCompare(b.openedAt));
+const journal = async () =>
+  (await db.select().from(trades)).sort((a, b) => a.openedAt.localeCompare(b.openedAt));
 
 describe("broker sync keeps every fill, even identical partial fills", () => {
   it("a short closed by two identical partial fills shows as closed before the next short opens", async () => {
     expect(await syncAccount("hl")).toMatchObject({ inserted: 4, duplicates: 0 });
-    expect(db.select().from(executions).all()).toHaveLength(4);
-    expect(journal()).toMatchObject([
+    expect(await db.select().from(executions)).toHaveLength(4);
+    expect(await journal()).toMatchObject([
       { direction: "short", status: "win", quantity: 1, grossPnl: 100, netPnl: 98.5 },
       { direction: "short", status: "open", quantity: 1, openQuantity: 1 },
     ]);
@@ -87,9 +80,9 @@ describe("broker sync keeps every fill, even identical partial fills", () => {
 
   it("syncing the same fills again adds nothing", async () => {
     await syncAccount("hl");
-    const before = journal();
+    const before = await journal();
     expect(await syncAccount("hl")).toMatchObject({ inserted: 0, duplicates: 4 });
-    expect(journal()).toEqual(before);
+    expect(await journal()).toEqual(before);
   });
 
   it("an account synced before this fix keeps its fills and gains only the missing copy", async () => {
@@ -120,15 +113,15 @@ describe("broker sync keeps every fill, even identical partial fills", () => {
         executedAt: new Date(reopened).toISOString(),
       },
     ]).timed;
-    insertExecutions("hl", legacy, "sync");
-    const legacyIds = db.select({ id: executions.id }).from(executions).all();
-    expect(journal()).toMatchObject([{ status: "open", openQuantity: 1.5 }]);
+    await insertExecutions("hl", legacy, "sync");
+    const legacyIds = await db.select({ id: executions.id }).from(executions);
+    expect(await journal()).toMatchObject([{ status: "open", openQuantity: 1.5 }]);
 
     expect(await syncAccount("hl")).toMatchObject({ inserted: 1, duplicates: 3 });
-    expect(db.select({ id: executions.id }).from(executions).all()).toEqual(
+    expect(await db.select({ id: executions.id }).from(executions)).toEqual(
       expect.arrayContaining(legacyIds),
     );
-    expect(journal()).toMatchObject([
+    expect(await journal()).toMatchObject([
       { status: "win", grossPnl: 100, netPnl: 98.5 },
       { status: "open", quantity: 1 },
     ]);
@@ -139,10 +132,10 @@ describe("broker sync keeps every fill, even identical partial fills", () => {
     await syncAccount("hl");
     userFills = history;
     expect(await syncAccount("hl")).toMatchObject({ inserted: 0, duplicates: 4 });
-    expect(db.select().from(executions).all()).toHaveLength(4);
+    expect(await db.select().from(executions)).toHaveLength(4);
   });
 
-  it("only broker and file sources can number identical fills, with whole numbers from 1", () => {
+  it("only broker and file sources can number identical fills, with whole numbers from 1", async () => {
     const [row] = brokerTradesToExecutions([
       { symbol: "ETH", side: "buy", quantity: 1, price: 2900, executedAt: "2026-10-01T10:00:00Z" },
     ]).timed;
@@ -151,7 +144,9 @@ describe("broker sync keeps every fill, even identical partial fills", () => {
     expect(problem(1)).toBeUndefined();
     expect(problem(2, "import")).toBeUndefined();
     for (const bad of [0, -1, 1.5, Number.NaN]) expect(problem(bad)).toMatch(/copy number/);
-    expect(() => insertExecutions("hl", [{ ...row!, occurrence: 1 }], "manual")).toThrow();
+    await expect(
+      (async () => await insertExecutions("hl", [{ ...row!, occurrence: 1 }], "manual"))(),
+    ).rejects.toThrow();
   });
 
   it("a later sync that sees fewer identical copies does not remove or re-add any", async () => {
@@ -159,6 +154,6 @@ describe("broker sync keeps every fill, even identical partial fills", () => {
     // The broker's history window moved past one copy; the stored copy stays.
     userFills = history.filter((row) => row.tid !== 3);
     expect(await syncAccount("hl")).toMatchObject({ inserted: 0, duplicates: 3 });
-    expect(db.select().from(executions).all()).toHaveLength(4);
+    expect(await db.select().from(executions)).toHaveLength(4);
   });
 });

@@ -13,7 +13,7 @@ Trade Journal is a [LuxAlgo](https://luxalgo.com) open-source project.
 [![npm](https://img.shields.io/npm/v/@luxalgo/journal-core?label=npm&color=white)](https://www.npmjs.com/package/@luxalgo/journal-core)
 [![License](https://img.shields.io/badge/license-MIT-white)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/lang-TypeScript-white)](packages/core/src/types.ts)
-[![SQLite](https://img.shields.io/badge/db-SQLite-white)](#quickstart)
+[![PostgreSQL](https://img.shields.io/badge/db-PostgreSQL-white)](#quickstart)
 
 [Homepage](https://www.luxalgo.com/trade-journal/) · [Quickstart](#quickstart) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [Migrate](#migrating-from-tradezella-or-tradervue) · [Edge Score](docs/edge-score.md) · [Contributing](CONTRIBUTING.md)
 
@@ -21,7 +21,7 @@ Trade Journal is a [LuxAlgo](https://luxalgo.com) open-source project.
 
 ---
 
-**Record every trade. See what actually works.** Connect a broker, drop in a statement export, or add trades manually from the dashboard. Trade Journal rebuilds your history into round-trip trades, a P&L calendar, deep analytics, and a daily journal you can type, dictate, or ask questions of with your own AI. Your journal lives in a local SQLite database; broker sync, market data, and AI connect to the services you choose.
+**Record every trade. See what actually works.** Connect a broker, drop in a statement export, or add trades manually from the dashboard. Trade Journal rebuilds your history into round-trip trades, a P&L calendar, deep analytics, and a daily journal you can type, dictate, or ask questions of with your own AI. Your journal lives in a PostgreSQL database; broker sync, market data, and AI connect to the services you choose.
 
 <img src=".github/assets/screenshot-dashboard.png" alt="Trade Journal dashboard in dark mode with demo trades, P&L gauges, Edge Score v2, equity curve, and monthly calendar" width="100%" />
 
@@ -37,11 +37,15 @@ _Dashboard with generated demo data. All screenshots below use synthetic records
 git clone https://github.com/LuxAlgo/trade-journal
 cd trade-journal
 pnpm install --frozen-lockfile
+docker compose up -d postgres
+cp .env.example apps/web/.env.local
 pnpm dev
 # http://localhost:3000
 ```
 
-Requirements: **Node 22+** and **pnpm 11.0.8** (the version pinned in `package.json`). First run creates the SQLite database and applies additive schema upgrades automatically. No migration tool, no setup wizard, no account. With the commands above, local data lives in `apps/web/data/`.
+Requirements: **Node 22+**, **pnpm 11.0.8** (the version pinned in `package.json`), and **PostgreSQL 17+**. Docker Compose provides PostgreSQL for local development. Set `DATABASE_URL` to an existing database; the app creates tables and applies additive schema upgrades on its first query. The encryption key and local caches live in `apps/web/data/`. Builds do not require a running database.
+
+Existing SQLite files are not automatically imported. Keep a backup of the old database and encryption key before switching; pointing the app at PostgreSQL starts a separate journal.
 
 For smooth everyday use or UI reviews, stop the development server and run `pnpm preview`.
 This builds the app once, then serves the optimized production version at the same address,
@@ -61,29 +65,32 @@ The **Prop firms** page has its own **Load demo data** button: a read-only simul
 ### Docker
 
 ```bash
-docker compose up -d
-# http://localhost:3000, data persisted in ./data on the host
+docker compose up -d --build
+# http://localhost:3000; PostgreSQL records persist in the postgres-data volume
 ```
 
-### Configuration (all optional)
+Compose waits for PostgreSQL to be healthy before starting the app. The `./data` bind mount retains the local encryption key. PostgreSQL is exposed only on `127.0.0.1:5432` for local development. Set `POSTGRES_PASSWORD` in the root `.env` before first startup to override the development password; use URL-safe characters because Compose includes it in `DATABASE_URL`. Changing it later also requires changing the database role password.
 
-| Env var              | Effect                                                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `JOURNAL_PASSWORD`   | Require a password; recommended when accessible beyond localhost                                         |
-| `JOURNAL_SECRET`     | Encryption key source for credentials at rest (default: generated key file in the data dir)              |
-| `JOURNAL_DATA_DIR`   | Database, attachments, and local encryption key directory (default `./data` relative to the app process) |
-| `ANTHROPIC_API_KEY`  | Anthropic AI key via env instead of the Settings page                                                    |
-| `OPENAI_API_KEY`     | OpenAI AI key via env instead of the Settings page                                                       |
-| `ANTHROPIC_BASE_URL` | Send Anthropic requests through a gateway or proxy (default `https://api.anthropic.com/v1`)              |
-| `OPENAI_BASE_URL`    | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)                    |
+### Configuration
 
-Set these in the process environment or in `apps/web/.env.local` for local Next.js runs; the root [`.env.example`](.env.example) documents the optional values. For Docker, configure the service environment in [`docker-compose.yml`](docker-compose.yml).
+| Env var              | Effect                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`       | Required PostgreSQL connection URL (provided automatically by Docker Compose)               |
+| `JOURNAL_PASSWORD`   | Require a password; recommended when accessible beyond localhost                            |
+| `JOURNAL_SECRET`     | Encryption key source for credentials at rest (default: generated key file in the data dir) |
+| `JOURNAL_DATA_DIR`   | Local encryption key and cache directory (default `./data` relative to the app process)     |
+| `ANTHROPIC_API_KEY`  | Anthropic AI key via env instead of the Settings page                                       |
+| `OPENAI_API_KEY`     | OpenAI AI key via env instead of the Settings page                                          |
+| `ANTHROPIC_BASE_URL` | Send Anthropic requests through a gateway or proxy (default `https://api.anthropic.com/v1`) |
+| `OPENAI_BASE_URL`    | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)       |
+
+Set these in the process environment or in `apps/web/.env.local` for local Next.js runs; the root [`.env.example`](.env.example) documents the values. For Docker, configure the service environment in [`docker-compose.yml`](docker-compose.yml).
 
 For AI, open **Settings → AI**, select **Anthropic** or **OpenAI**, enter your API key, and choose **Save AI settings**. OpenAI defaults to `gpt-4.1-mini`; you can enter another text model ID available to your account. Each provider keeps its own encrypted key and model choice. Existing Anthropic settings continue to work. An OpenAI-only environment setup selects OpenAI automatically; with both keys present, Anthropic remains the default until you save a provider choice. Environment keys override saved keys and must be changed on the server. Saving settings does not make a model request or verify account access.
 
 To use a local or third-party model, select **OpenAI-compatible** and enter the server's API URL, a model ID, and an API key only if the server requires one: for example `http://localhost:11434/v1` for Ollama or `https://openrouter.ai/api/v1` for OpenRouter. The journal server sends Chat Completions requests to that URL, so it must be reachable from there. In Docker, `localhost` is the container itself; use `http://host.docker.internal:11434/v1` instead (on Linux, also add `extra_hosts: ["host.docker.internal:host-gateway"]` to the service and make sure the model server listens beyond `127.0.0.1`). A saved key is only sent to the URL it was saved with, so saving a different URL removes it. AI statement parsing on the Import page stays on Anthropic and OpenAI, which accept PDFs and strict structured output.
 
-Deploy anywhere a Node process and a persistent disk exist: Docker, Railway, Fly.io, a small VPS. Serverless platforms without a disk need an external database, which this release does not support. SQLite on disk is the point.
+Deploy with a Node process and a PostgreSQL database: Docker, Railway, Fly.io, or a VPS. Use `DATABASE_URL` for a local or managed PostgreSQL instance. Retain the data directory or configure a stable `JOURNAL_SECRET` so credentials remain decryptable across deployments.
 
 Optional historical market data powers estimated MAE/MFE and candle replay on closed trades, with Vela™ rendering the charts. Configure a connection or upload candle CSVs in **Settings → Market data**. No provider is enabled or selected by default. See [Market data and replay](#market-data-and-replay) below and the [market data guide](docs/market-data.md) for setup, calculation definitions, and coverage limits.
 
@@ -107,7 +114,7 @@ A trade journal is two things: a **verified record** of what you actually did, a
 
 - **You control your connections.** Broker, market-data, and saved AI credentials are encrypted at rest with AES-256-GCM. Your server uses them to contact the provider you configure, without a LuxAlgo credential proxy.
 - **Your numbers are auditable.** The [Edge Score](docs/edge-score.md) is a documented, versioned formula, not a proprietary black box. Every metric is open source and unit-tested.
-- **Your journal is portable.** Export trades as CSV, journal records as JSON, and reviews as PDF or PNG. Back up the data directory to retain attachments and the full local state; see [Export and backup](#export-and-backup).
+- **Your journal is portable.** Export trades as CSV, journal records as JSON, and reviews as PDF or PNG. Back up PostgreSQL and the data directory to retain attachments and the full state; see [Export and backup](#export-and-backup).
 
 ## How it works
 
@@ -243,9 +250,20 @@ See [supported formats and validation status](docs/importers.md). Have an export
 
 **Settings → Data & backups → Full backup (JSON)** includes accounts (without credentials), executions, trades and annotations, daily journal entries, notebook folders and notes, templates, playbooks and rule checks, routines, missed trades, journal defaults, prop firm records and their audit history, and attachment metadata. Trades also export as CSV; review exports support PDF and PNG.
 
-JSON export excludes credentials, candle datasets, saved market-data estimates, and attachment binaries, and there is no general JSON restore importer in this release. For a complete local backup, stop the app and copy the entire data directory, including attachments and the hidden `.secret` file if generated. If you supply `JOURNAL_SECRET`, retain that value separately so encrypted credentials remain readable. Keep original candle CSVs as well.
+JSON export excludes credentials, candle datasets, saved market-data estimates, and attachment binaries, and there is no general JSON restore importer in this release. For a complete backup, stop the app, dump PostgreSQL, and copy the local data directory including the hidden `.secret` file if generated. Attachment binaries are stored in PostgreSQL. If you supply `JOURNAL_SECRET`, retain that value separately so encrypted credentials remain readable. Keep original candle CSVs as well.
 
-Default locations: `apps/web/data/` for the pnpm commands above, or the host's `./data` bind mount for Docker. `JOURNAL_DATA_DIR` overrides the app's path.
+With Docker Compose:
+
+```bash
+docker compose stop journal
+docker compose exec -T postgres pg_dump -U journal -d journal -Fc > journal.dump
+# Copy ./data (including .secret) alongside journal.dump, then restart:
+docker compose start journal
+```
+
+Restore the dump into an empty database using `pg_restore`, and restore the same encryption key before starting the app. Do not use `docker compose down -v` unless you intend to delete the database volume.
+
+Local file locations: `apps/web/data/` for pnpm, or the host's `./data` bind mount for Docker. `JOURNAL_DATA_DIR` overrides the app's path; it does not change the database location.
 
 ## Monorepo layout
 
@@ -253,7 +271,7 @@ Default locations: `apps/web/data/` for the pnpm commands above, or the host's `
 | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
 | [`packages/core`](packages/core)           | `@luxalgo/journal-core`: pure domain engine (round trips, metrics, calendar, Edge Score). No IO, no framework, fully unit-tested. |
 | [`packages/importers`](packages/importers) | `@luxalgo/journal-importers`: statement parsers + migration importers. Zero-dependency CSV/HTML parsing.                          |
-| [`apps/web`](apps/web)                     | The app: Next.js 15, SQLite (Drizzle), Tailwind, Recharts/ECharts, Vela charting, TanStack Table, ai-sdk.                         |
+| [`apps/web`](apps/web)                     | The app: Next.js 15, PostgreSQL (Drizzle), Tailwind, Recharts/ECharts, Vela charting, TanStack Table, ai-sdk.                     |
 
 ### Use the engine in your own app
 
@@ -305,3 +323,15 @@ Trade Journal reports and analyzes what your broker reports. Nothing it computes
 ## License
 
 Code is licensed under [MIT](LICENSE) © [LuxAlgo Global, LLC](https://luxalgo.com). The project name and LuxAlgo marks are covered by the [trademark policy](TRADEMARKS.md). Security reports: see [SECURITY.md](SECURITY.md).
+
+### Database tests
+
+Run tests against a disposable PostgreSQL database:
+
+```bash
+docker compose up -d postgres
+docker compose exec postgres createdb -U journal journal_test
+TEST_DATABASE_URL=postgresql://journal:journal@localhost:5432/journal_test pnpm test
+```
+
+The test role must be able to create schemas. Each test file uses an isolated schema, removed after its tests; `TEST_DATABASE_URL` is separate from the app's `DATABASE_URL`. CI provisions PostgreSQL automatically.

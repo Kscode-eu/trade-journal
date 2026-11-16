@@ -45,41 +45,42 @@ export interface SyncOutcome extends InsertResult {
 }
 
 export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+  const account = (await db.select().from(accounts).where(eq(accounts.id, accountId)))[0];
   if (!account) throw new Error("Account not found");
   if (account.kind !== "sync" || !account.credentialsEnc) {
     throw new Error("Account is not broker-connected");
   }
 
   const statementTimeZone = isIbkrSyncAccount(account)
-    ? canonicalImportTimeZone(getImportTimeZone())
+    ? canonicalImportTimeZone(await getImportTimeZone())
     : undefined;
-  if (statementTimeZone !== undefined) assertIbkrSyncTimeZone(account, statementTimeZone);
+  if (statementTimeZone !== undefined) await assertIbkrSyncTimeZone(account, statementTimeZone);
 
   const credentials = decryptJson<Record<string, string>>(account.credentialsEnc);
   // Brokers that page through trade history (Webull) only need recent fills
   // once history has landed; refetched fills dedupe by content hash.
-  const hasSyncedFills = db
-    .select({ id: executions.id })
-    .from(executions)
-    .where(and(eq(executions.accountId, accountId), eq(executions.source, "sync")))
-    .get();
+  const hasSyncedFills = (
+    await db
+      .select({ id: executions.id })
+      .from(executions)
+      .where(and(eq(executions.accountId, accountId), eq(executions.source, "sync")))
+  )[0];
   const historySince =
     hasSyncedFills && account.lastSyncAt
       ? new Date(Date.parse(account.lastSyncAt) - HISTORY_OVERLAP_MS).toISOString()
       : undefined;
-  const connection = connect({
+  const connection = await connect({
     broker: account.broker as BrokerId,
     credentials,
     ...(historySince !== undefined ? { historySince } : {}),
     ...(statementTimeZone !== undefined ? { statementTimeZone } : {}),
     ...(isIbkrSyncAccount(account) ? { fetch: flexExecutionRowsOnly } : {}),
     // Some brokers rotate tokens on every fetch (Questrade): persist or die.
-    onCredentialsRotated: (next: Record<string, string>) => {
-      db.update(accounts)
+    onCredentialsRotated: async (next: Record<string, string>) => {
+      await db
+        .update(accounts)
         .set({ credentialsEnc: encryptJson(next) })
-        .where(eq(accounts.id, accountId))
-        .run();
+        .where(eq(accounts.id, accountId));
     },
   } as Parameters<typeof connect>[0]);
 
@@ -88,12 +89,12 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
 
   const trades = snapshot.accounts.flatMap((brokerAccount) => brokerAccount.trades);
   // Option P&L needs the contract size; the broker's value never replaces the user's.
-  const multipliers = getMultipliers();
+  const multipliers = await getMultipliers();
   const stated = trades.filter(
     (trade) => trade.multiplier && multipliers[trade.symbol] === undefined,
   );
   for (const trade of stated) multipliers[trade.symbol] = trade.multiplier!;
-  if (stated.length > 0) setSetting("multipliers", JSON.stringify(multipliers));
+  if (stated.length > 0) await setSetting("multipliers", JSON.stringify(multipliers));
   const { timed, untimed, positionEffects } = brokerTradesToExecutions(trades);
 
   // A broker whose position list is complete for an asset class can show
@@ -115,13 +116,13 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
     checked && !delivered(symbol) ? (brokerQuantities.get(symbol) ?? 0) : undefined;
   let dropped = 0;
   let trimmed = 0;
-  const withinHistory = (fills: ImportedExecution[]): ImportedExecution[] => {
-    const stored = db.select().from(executions).where(eq(executions.accountId, accountId)).all();
+  const withinHistory = async (fills: ImportedExecution[]): Promise<ImportedExecution[]> => {
+    const stored = await db.select().from(executions).where(eq(executions.accountId, accountId));
     const storedHashes = new Set(stored.map((row) => row.contentHash));
     const fresh = fills.filter((fill) => !storedHashes.has(executionHash(fill)));
     const groupOf = (json: string | null) =>
       json ? (JSON.parse(json) as { group?: string }).group : undefined;
-    const keep = keepWithinHistory(
+    const keep = await keepWithinHistory(
       stored.map((row) => ({
         ...row,
         side: row.side as "buy" | "sell",
@@ -151,53 +152,50 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
 
   const equity = snapshot.accounts.reduce((total, a) => total + a.equity, 0);
   const positions = snapshot.accounts.flatMap((a) => a.positions);
-  const result = db.transaction(
-    () => {
-      if (statementTimeZone !== undefined) {
-        const current = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
-        requireValue(
-          current &&
-            isIbkrSyncAccount(current) &&
-            current.credentialsEnc === account.credentialsEnc,
-          "The IBKR connection changed during sync. Try again.",
-        );
-        assertIbkrSyncTimeZone(current, statementTimeZone);
-      }
-      // Validation, history provenance, deduplication and sync status commit together.
-      const inserted = insertExecutions(accountId, withinHistory(timed), "sync");
-      if (account.broker === "webull") {
-        const optionFills = db
+  const result = await db.transaction(async () => {
+    if (statementTimeZone !== undefined) {
+      const current = (await db.select().from(accounts).where(eq(accounts.id, accountId)))[0];
+      requireValue(
+        current && isIbkrSyncAccount(current) && current.credentialsEnc === account.credentialsEnc,
+        "The IBKR connection changed during sync. Try again.",
+      );
+      await assertIbkrSyncTimeZone(current, statementTimeZone);
+    }
+    // Validation, history provenance, deduplication and sync status commit together.
+    const inserted = await insertExecutions(accountId, await withinHistory(timed), "sync");
+    if (account.broker === "webull") {
+      const optionFills = (
+        await db
           .select()
           .from(executions)
           .where(and(eq(executions.accountId, accountId), eq(executions.assetClass, "option")))
-          .all()
-          .map((row) => ({ ...row, side: row.side as "buy" | "sell" }));
-        const expired = expiredOptionCloses(optionFills, syncedAt).map((fill) => ({
-          ...fill,
-          assetClass: "option" as const,
-          price: 0,
-          fee: 0,
-        }));
-        // An expiry has no commission, so default fee rules must not add one.
-        if (expired.length > 0)
-          inserted.inserted += insertExecutions(accountId, expired, "sync", undefined, {
+      ).map((row) => ({ ...row, side: row.side as "buy" | "sell" }));
+      const expired = expiredOptionCloses(optionFills, syncedAt).map((fill) => ({
+        ...fill,
+        assetClass: "option" as const,
+        price: 0,
+        fee: 0,
+      }));
+      // An expiry has no commission, so default fee rules must not add one.
+      if (expired.length > 0)
+        inserted.inserted += (
+          await insertExecutions(accountId, expired, "sync", undefined, {
             preserveFees: true,
-          }).inserted;
-      }
-      db.update(accounts)
-        .set({
-          lastSyncAt: syncedAt,
-          snapshotJson: JSON.stringify({ equity, positions, fetchedAt: snapshot.fetchedAt }),
-          ...(statementTimeZone !== undefined && inserted.inserted > 0
-            ? { ibkrSyncTimeZone: statementTimeZone }
-            : {}),
-        })
-        .where(eq(accounts.id, accountId))
-        .run();
-      return inserted;
-    },
-    { behavior: "immediate" },
-  );
+          })
+        ).inserted;
+    }
+    await db
+      .update(accounts)
+      .set({
+        lastSyncAt: syncedAt,
+        snapshotJson: JSON.stringify({ equity, positions, fetchedAt: snapshot.fetchedAt }),
+        ...(statementTimeZone !== undefined && inserted.inserted > 0
+          ? { ibkrSyncTimeZone: statementTimeZone }
+          : {}),
+      })
+      .where(eq(accounts.id, accountId));
+    return inserted;
+  });
   if (dropped > 0) {
     result.skipped += dropped;
     if (result.skippedReasons.length < 5)

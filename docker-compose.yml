@@ -1,4 +1,20 @@
 services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: journal
+      POSTGRES_USER: journal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-journal}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal -d journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
   journal:
     build: .
     ports:
@@ -6,9 +22,15 @@ services:
     volumes:
       - ./data:/data
     environment:
+      DATABASE_URL: postgresql://journal:${POSTGRES_PASSWORD:-journal}@postgres:5432/journal
       # Optional: require a password (recommended when exposed beyond localhost)
       # JOURNAL_PASSWORD: change-me
       # Optional: stable encryption secret for broker credentials at rest
       # JOURNAL_SECRET: change-me-too
       JOURNAL_DATA_DIR: /data
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+volumes:
+  postgres-data:

@@ -56,8 +56,8 @@ const preview = async (content: string, extra: object = {}) =>
 const commit = (content: string, extra: object = {}) =>
   post({ mode: "commit", accountId: "file", content, fileName: "flex.xml", ...extra });
 const times = (rows: { executedAt: string }[]) => rows.map((row) => row.executedAt).sort();
-const stored = (accountId = "file") =>
-  db.select().from(executions).where(eq(executions.accountId, accountId)).all();
+const stored = async (accountId = "file") =>
+  await db.select().from(executions).where(eq(executions.accountId, accountId));
 
 let statement = flexXml();
 const mockFlexService = () =>
@@ -74,32 +74,29 @@ const mockFlexService = () =>
     }),
   );
 
-beforeEach(() => {
-  db.delete(trades).run();
-  db.delete(executions).run();
-  db.delete(accounts).run();
-  db.delete(settings).run();
-  db.insert(accounts)
-    .values({ id: "file", name: "IBKR file", kind: "import", createdAt: "2026-01-01" })
-    .run();
-  db.insert(accounts)
-    .values({
-      id: "ibkr",
-      name: "IBKR sync",
-      kind: "sync",
-      broker: "ibkr-flex",
-      credentialsEnc: encryptJson({ flexToken: "test-only", flexQueryId: "test-only" }),
-      createdAt: "2026-01-01",
-    })
-    .run();
-  setSetting("importTimeZone", "America/New_York");
-  setSetting("timeZone", "Europe/Rome");
+beforeEach(async () => {
+  await db.delete(trades);
+  await db.delete(executions);
+  await db.delete(accounts);
+  await db.delete(settings);
+  await db
+    .insert(accounts)
+    .values({ id: "file", name: "IBKR file", kind: "import", createdAt: "2026-01-01" });
+  await db.insert(accounts).values({
+    id: "ibkr",
+    name: "IBKR sync",
+    kind: "sync",
+    broker: "ibkr-flex",
+    credentialsEnc: encryptJson({ flexToken: "test-only", flexQueryId: "test-only" }),
+    createdAt: "2026-01-01",
+  });
+  await setSetting("importTimeZone", "America/New_York");
+  await setSetting("timeZone", "Europe/Rome");
   statement = flexXml();
   mockFlexService();
 });
 afterEach(() => vi.unstubAllGlobals());
 afterAll(() => {
-  db.$client.close();
   vi.unstubAllEnvs();
   rmSync(scratch, { recursive: true, force: true });
 });
@@ -122,7 +119,7 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
     const response = await commit(flexXml());
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ inserted: 2, duplicates: 0 });
-    const trade = db.select().from(trades).get()!;
+    const trade = (await db.select().from(trades))[0]!;
     expect(trade).toMatchObject({
       openedAt: "2026-09-18T12:59:05.000Z",
       closedAt: "2026-09-18T14:08:30.000Z",
@@ -144,7 +141,7 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
     ["America/New_York", ["2026-09-18T12:59:05.000Z", "2026-09-18T14:08:30.000Z"]],
     ["Pacific/Kiritimati", ["2026-09-17T18:59:05.000Z", "2026-09-17T20:08:30.000Z"]],
   ])("reads naive Flex times in the chosen timezone %s", async (timeZone, expected) => {
-    setSetting("importTimeZone", timeZone);
+    await setSetting("importTimeZone", timeZone);
     expect(times((await preview(flexXml())).executions)).toEqual(expected);
     expect(times((await preview(flexXml(), { timeZone })).executions)).toEqual(expected);
   });
@@ -159,7 +156,7 @@ describe("IBKR Flex Query XML upload honours the statement timezone (#16)", () =
   it("treats a re-upload of the same statement as duplicates", async () => {
     expect(await (await commit(flexXml())).json()).toMatchObject({ inserted: 2 });
     expect(await (await commit(flexXml())).json()).toMatchObject({ inserted: 0, duplicates: 2 });
-    expect(stored()).toHaveLength(2);
+    expect(await stored()).toHaveLength(2);
   });
 
   it("lists Flex XML among the auto-detected formats", async () => {
@@ -177,31 +174,31 @@ describe("Flex XML uploads into an IBKR sync account", () => {
     const response = await commit(flexXml(), { accountId: "ibkr" });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ inserted: 0, duplicates: 2 });
-    expect(stored("ibkr").map((row) => row.source)).toEqual(["sync", "sync"]);
+    expect((await stored("ibkr")).map((row) => row.source)).toEqual(["sync", "sync"]);
   });
 
   it("refuses an upload in another timezone instead of storing every fill twice", async () => {
     await syncAccount("ibkr");
-    const before = stored("ibkr");
+    const before = await stored("ibkr");
     const previewed = await preview(flexXml(), { accountId: "ibkr", timeZone: "UTC" });
     expect(previewed.errors.join(" ")).toMatch(/syncs IBKR statements in America\/New_York/);
     const response = await commit(flexXml(), { accountId: "ibkr", timeZone: "UTC" });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/upload uses UTC/);
-    expect(stored("ibkr")).toEqual(before);
+    expect(await stored("ibkr")).toEqual(before);
   });
 
   it("uses the zone the next sync will use when nothing has synced yet", async () => {
     const response = await commit(flexXml(), { accountId: "ibkr", timeZone: "Europe/Rome" });
     expect(response.status).toBe(400);
-    expect(stored("ibkr")).toHaveLength(0);
+    expect(await stored("ibkr")).toHaveLength(0);
     expect((await commit(flexXml(), { accountId: "ibkr" })).status).toBe(200);
     expect(await syncAccount("ibkr")).toMatchObject({ inserted: 0, duplicates: 2 });
   });
 
   it("refuses an upload into history synced before timezone-aware sync", async () => {
     await syncAccount("ibkr");
-    db.update(accounts).set({ ibkrSyncTimeZone: null }).where(eq(accounts.id, "ibkr")).run();
+    await db.update(accounts).set({ ibkrSyncTimeZone: null }).where(eq(accounts.id, "ibkr"));
     const response = await commit(flexXml(), { accountId: "ibkr" });
     expect(response.status).toBe(400);
     expect((await response.json()).error).toMatch(/before timezone-aware sync/);
@@ -217,7 +214,7 @@ describe("Flex XML statements that cannot be imported as-is", () => {
     const result = await preview(mixed);
     expect(result.errors.join(" ")).toMatch(/2 IBKR accounts \(U_TEST, U_OTHER\)/);
     expect((await commit(mixed)).status).toBe(400);
-    expect(stored()).toHaveLength(0);
+    expect(await stored()).toHaveLength(0);
   });
 
   it("skips order and lot summaries so fills are not counted twice", async () => {

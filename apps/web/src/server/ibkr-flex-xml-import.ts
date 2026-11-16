@@ -114,15 +114,18 @@ export const parseFlexXmlImport = (content: string, timeZone: string): ParsedImp
  * An upload into an IBKR sync account must use the statement timezone sync
  * uses, or the same fills would hash differently and be stored twice.
  */
-export const flexUploadSyncProblem = (accountId: string, zone: string): string | null => {
-  const account = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+export const flexUploadSyncProblem = async (
+  accountId: string,
+  zone: string,
+): Promise<string | null> => {
+  const account = (await db.select().from(accounts).where(eq(accounts.id, accountId)))[0];
   if (!account || (!isIbkrSyncAccount(account) && account.ibkrSyncTimeZone === null)) return null;
-  const syncZone = canonicalImportTimeZone(account.ibkrSyncTimeZone ?? getImportTimeZone());
+  const syncZone = canonicalImportTimeZone(account.ibkrSyncTimeZone ?? (await getImportTimeZone()));
   const uploadZone = canonicalImportTimeZone(zone);
   if (uploadZone !== syncZone)
     return `This account syncs IBKR statements in ${syncZone}, but this upload uses ${uploadZone}. Upload with the ${syncZone} statement timezone so uploaded and synced fills match, or import into a separate account.`;
   try {
-    assertIbkrSyncTimeZone(account, uploadZone);
+    await assertIbkrSyncTimeZone(account, uploadZone);
   } catch (error) {
     if (error instanceof RequestError) return error.message;
     throw error;

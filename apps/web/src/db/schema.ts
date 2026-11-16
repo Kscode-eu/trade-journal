@@ -1,15 +1,21 @@
 import {
-  blob,
+  customType,
+  boolean,
+  bigint,
   index,
   integer,
-  real,
-  sqliteTable,
+  doublePrecision,
+  pgTable,
   text,
   uniqueIndex,
-  type AnySQLiteColumn,
-} from "drizzle-orm/sqlite-core";
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
 
-export const importSources = sqliteTable("import_sources", {
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+export const importSources = pgTable("import_sources", {
   id: text("id").primaryKey(),
   accountId: text("account_id")
     .notNull()
@@ -18,7 +24,7 @@ export const importSources = sqliteTable("import_sources", {
   name: text("name").notNull(),
   createdAt: text("created_at").notNull(),
 });
-export const importSourceAliases = sqliteTable(
+export const importSourceAliases = pgTable(
   "import_source_aliases",
   {
     id: text("id").primaryKey(),
@@ -35,7 +41,7 @@ export const importSourceAliases = sqliteTable(
     uniqueIndex("import_source_alias_unique").on(table.accountId, table.format, table.aliasKey),
   ],
 );
-export const importBatches = sqliteTable(
+export const importBatches = pgTable(
   "import_batches",
   {
     id: text("id").primaryKey(),
@@ -58,20 +64,20 @@ export const importBatches = sqliteTable(
 );
 
 /** One journal account = one broker/platform's trades (TradeZella's model, kept). */
-export const accounts = sqliteTable("accounts", {
+export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   /** SDK broker id for sync accounts; free text label otherwise. */
   broker: text("broker").notNull().default(""),
   kind: text("kind", { enum: ["sync", "import", "manual"] }).notNull(),
   currency: text("currency").notNull().default("USD"),
-  initialBalance: real("initial_balance").notNull().default(0),
+  initialBalance: doublePrecision("initial_balance").notNull().default(0),
   profitCalcMethod: text("profit_calc_method", { enum: ["fifo", "lifo", "wavg"] })
     .notNull()
     .default("fifo"),
   /** AES-256-GCM envelope, present only for kind = "sync". */
   credentialsEnc: text("credentials_enc"),
-  autoSync: integer("auto_sync", { mode: "boolean" }).notNull().default(false),
+  autoSync: boolean("auto_sync").notNull().default(false),
   lastSyncAt: text("last_sync_at"),
   /** Timezone used by corrected IBKR sync; null on legacy histories. Follows account transfers. */
   ibkrSyncTimeZone: text("ibkr_sync_time_zone"),
@@ -81,16 +87,16 @@ export const accounts = sqliteTable("accounts", {
   createdAt: text("created_at").notNull(),
 });
 
-export const executions = sqliteTable(
+export const executions = pgTable(
   "executions",
   {
     id: text("id").primaryKey(),
     accountId: text("account_id").notNull(),
     symbol: text("symbol").notNull(),
     side: text("side", { enum: ["buy", "sell"] }).notNull(),
-    quantity: real("quantity").notNull(),
-    price: real("price").notNull(),
-    fee: real("fee").notNull().default(0),
+    quantity: doublePrecision("quantity").notNull(),
+    price: doublePrecision("price").notNull(),
+    fee: doublePrecision("fee").notNull().default(0),
     executedAt: text("executed_at").notNull(),
     assetClass: text("asset_class"),
     source: text("source", { enum: ["sync", "import", "manual"] }).notNull(),
@@ -110,7 +116,7 @@ export const executions = sqliteTable(
  * annotation columns (notes → reviewedAt) belong to the user and survive
  * rebuilds because the row key is rebuild-stable.
  */
-export const trades = sqliteTable(
+export const trades = pgTable(
   "trades",
   {
     key: text("key").primaryKey(),
@@ -121,25 +127,25 @@ export const trades = sqliteTable(
     status: text("status", { enum: ["open", "win", "loss", "breakeven"] }).notNull(),
     openedAt: text("opened_at").notNull(),
     closedAt: text("closed_at"),
-    quantity: real("quantity").notNull(),
-    openQuantity: real("open_quantity").notNull(),
-    avgEntry: real("avg_entry").notNull(),
-    avgExit: real("avg_exit"),
-    grossPnl: real("gross_pnl").notNull(),
-    fees: real("fees").notNull(),
-    netPnl: real("net_pnl").notNull(),
+    quantity: doublePrecision("quantity").notNull(),
+    openQuantity: doublePrecision("open_quantity").notNull(),
+    avgEntry: doublePrecision("avg_entry").notNull(),
+    avgExit: doublePrecision("avg_exit"),
+    grossPnl: doublePrecision("gross_pnl").notNull(),
+    fees: doublePrecision("fees").notNull(),
+    netPnl: doublePrecision("net_pnl").notNull(),
     executionCount: integer("execution_count").notNull(),
     executionIdsJson: text("execution_ids_json").notNull(),
     exitsJson: text("exits_json").notNull(),
-    durationMs: integer("duration_ms"),
+    durationMs: bigint("duration_ms", { mode: "number" }),
     // ---- annotations (user-owned, preserved across rebuilds) ----
     notes: text("notes"),
     tagsJson: text("tags_json"),
     mistakesJson: text("mistakes_json"),
     playbookId: text("playbook_id"),
     rating: integer("rating"),
-    stopLoss: real("stop_loss"),
-    profitTarget: real("profit_target"),
+    stopLoss: doublePrecision("stop_loss"),
+    profitTarget: doublePrecision("profit_target"),
     reviewedAt: text("reviewed_at"),
   },
   (table) => [
@@ -150,14 +156,14 @@ export const trades = sqliteTable(
   ],
 );
 
-export const journalDays = sqliteTable("journal_days", {
+export const journalDays = pgTable("journal_days", {
   /** "YYYY-MM-DD" in the journal's display timezone. */
   date: text("date").primaryKey(),
   note: text("note").notNull().default(""),
   updatedAt: text("updated_at").notNull(),
 });
 
-export const folders = sqliteTable("folders", {
+export const folders = pgTable("folders", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   kind: text("kind", { enum: ["system", "user"] })
@@ -167,7 +173,7 @@ export const folders = sqliteTable("folders", {
   deletedAt: text("deleted_at"),
 });
 
-export const notes = sqliteTable(
+export const notes = pgTable(
   "notes",
   {
     id: text("id").primaryKey(),
@@ -184,7 +190,7 @@ export const notes = sqliteTable(
   (table) => [index("notes_folder").on(table.folderId)],
 );
 
-export const playbooks = sqliteTable("playbooks", {
+export const playbooks = pgTable("playbooks", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description").notNull().default(""),
@@ -193,34 +199,34 @@ export const playbooks = sqliteTable("playbooks", {
   createdAt: text("created_at").notNull(),
 });
 
-export const settings = sqliteTable("settings", {
+export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
 
-export const attachments = sqliteTable("attachments", {
+export const attachments = pgTable("attachments", {
   id: text("id").primaryKey(),
   ownerType: text("owner_type").notNull(),
   ownerId: text("owner_id").notNull(),
   name: text("name").notNull(),
   mime: text("mime").notNull(),
   size: integer("size").notNull(),
-  data: blob("data", { mode: "buffer" }).notNull(),
+  data: bytea("data").notNull(),
   createdAt: text("created_at").notNull(),
 });
-export const noteTemplates = sqliteTable("note_templates", {
+export const noteTemplates = pgTable("note_templates", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   content: text("content").notNull(),
 });
-export const tradeRuleChecks = sqliteTable("trade_rule_checks", {
+export const tradeRuleChecks = pgTable("trade_rule_checks", {
   id: text("id").primaryKey(),
   tradeKey: text("trade_key").notNull(),
   playbookId: text("playbook_id").notNull(),
   rule: text("rule").notNull(),
-  followed: integer("followed", { mode: "boolean" }).notNull(),
+  followed: boolean("followed").notNull(),
 });
-export const progressRules = sqliteTable("progress_rules", {
+export const progressRules = pgTable("progress_rules", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   stage: text("stage").notNull(),
@@ -228,28 +234,28 @@ export const progressRules = sqliteTable("progress_rules", {
   createdAt: text("created_at").notNull(),
   archivedAt: text("archived_at"),
 });
-export const progressChecks = sqliteTable("progress_checks", {
+export const progressChecks = pgTable("progress_checks", {
   id: text("id").primaryKey(),
   ruleId: text("rule_id").notNull(),
   date: text("date").notNull(),
-  done: integer("done", { mode: "boolean" }).notNull(),
+  done: boolean("done").notNull(),
 });
-export const missedTrades = sqliteTable("missed_trades", {
+export const missedTrades = pgTable("missed_trades", {
   id: text("id").primaryKey(),
   symbol: text("symbol").notNull(),
   direction: text("direction").notNull(),
   observedAt: text("observed_at").notNull(),
   playbookId: text("playbook_id"),
-  entry: real("entry"),
-  stop: real("stop"),
-  target: real("target"),
+  entry: doublePrecision("entry"),
+  stop: doublePrecision("stop"),
+  target: doublePrecision("target"),
   notes: text("notes").notNull().default(""),
   createdAt: text("created_at").notNull(),
   archivedAt: text("archived_at"),
 });
 
 /** Derived market-data estimates; journal fills remain authoritative. */
-export const tradeExcursions = sqliteTable("trade_excursions", {
+export const tradeExcursions = pgTable("trade_excursions", {
   tradeKey: text("trade_key")
     .primaryKey()
     .references(() => trades.key, { onDelete: "cascade" }),
@@ -262,7 +268,7 @@ export const tradeExcursions = sqliteTable("trade_excursions", {
 });
 
 /** User-supplied market candles, separate from execution imports and journal exports. */
-export const marketCsvDatasets = sqliteTable("market_csv_datasets", {
+export const marketCsvDatasets = pgTable("market_csv_datasets", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   symbol: text("symbol").notNull(),
@@ -271,35 +277,35 @@ export const marketCsvDatasets = sqliteTable("market_csv_datasets", {
   priceBasis: text("price_basis").notNull(),
   barsJson: text("bars_json").notNull(),
   barCount: integer("bar_count").notNull(),
-  firstTime: integer("first_time").notNull(),
-  lastTime: integer("last_time").notNull(),
+  firstTime: bigint("first_time", { mode: "number" }).notNull(),
+  lastTime: bigint("last_time", { mode: "number" }).notNull(),
   importedAt: text("imported_at").notNull(),
 });
 
 /** User-maintained prop account attempts and actual cash flows, never journal P&L. */
-export const propAccounts = sqliteTable("prop_accounts", {
+export const propAccounts = pgTable("prop_accounts", {
   id: text("id").primaryKey(),
   firm: text("firm").notNull(),
   name: text("name").notNull(),
   program: text("program").notNull(),
   status: text("status").notNull(),
   currency: text("currency").notNull(),
-  sizeMinor: integer("size_minor"),
-  parentId: text("parent_id").references((): AnySQLiteColumn => propAccounts.id),
+  sizeMinor: bigint("size_minor", { mode: "number" }),
+  parentId: text("parent_id").references((): AnyPgColumn => propAccounts.id),
   journalAccountId: text("journal_account_id").references(() => accounts.id, {
     onDelete: "set null",
   }),
   openedOn: text("opened_on").notNull(),
   closedOn: text("closed_on"),
   renewalOn: text("renewal_on"),
-  renewalMinor: integer("renewal_minor"),
+  renewalMinor: bigint("renewal_minor", { mode: "number" }),
   notes: text("notes").notNull().default(""),
-  archived: integer("archived", { mode: "boolean" }).notNull().default(false),
+  archived: boolean("archived").notNull().default(false),
   revision: integer("revision").notNull().default(1),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
-export const propEntries = sqliteTable(
+export const propEntries = pgTable(
   "prop_entries",
   {
     id: text("id").primaryKey(),
@@ -308,16 +314,16 @@ export const propEntries = sqliteTable(
     kind: text("kind").notNull(),
     category: text("category").notNull(),
     currency: text("currency").notNull(),
-    amountMinor: integer("amount_minor").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     splitBps: integer("split_bps").notNull(),
-    feeMinor: integer("fee_minor").notNull(),
+    feeMinor: bigint("fee_minor", { mode: "number" }).notNull(),
     occurredOn: text("occurred_on").notNull(),
     dueOn: text("due_on"),
     status: text("status").notNull(),
-    parentId: text("parent_id").references((): AnySQLiteColumn => propEntries.id),
+    parentId: text("parent_id").references((): AnyPgColumn => propEntries.id),
     reference: text("reference").notNull().default(""),
     notes: text("notes").notNull().default(""),
-    voided: integer("voided", { mode: "boolean" }).notNull().default(false),
+    voided: boolean("voided").notNull().default(false),
     revision: integer("revision").notNull().default(1),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -327,7 +333,7 @@ export const propEntries = sqliteTable(
     index("prop_entries_date").on(table.occurredOn),
   ],
 );
-export const propReceipts = sqliteTable(
+export const propReceipts = pgTable(
   "prop_receipts",
   {
     id: text("id").primaryKey(),
@@ -335,16 +341,16 @@ export const propReceipts = sqliteTable(
       .notNull()
       .references(() => propEntries.id),
     kind: text("kind").notNull(),
-    amountMinor: integer("amount_minor").notNull(),
+    amountMinor: bigint("amount_minor", { mode: "number" }).notNull(),
     occurredOn: text("occurred_on").notNull(),
     reference: text("reference").notNull().default(""),
     notes: text("notes").notNull().default(""),
-    voided: integer("voided", { mode: "boolean" }).notNull().default(false),
+    voided: boolean("voided").notNull().default(false),
     createdAt: text("created_at").notNull(),
   },
   (table) => [index("prop_receipts_payout").on(table.payoutId)],
 );
-export const propAudit = sqliteTable(
+export const propAudit = pgTable(
   "prop_audit",
   {
     id: text("id").primaryKey(),
