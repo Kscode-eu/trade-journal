@@ -25,6 +25,13 @@ export interface ImportMetadata {
    * matching does not read this flag; it is a source fact carried through.
    */
   preserveFee?: boolean;
+  /** Saxo position reports retain quoted prices and broker-reported account-currency P&L. */
+  saxo?: {
+    reconstructed: boolean;
+    positionId: string;
+    priceCurrency?: string;
+    contractMultiplier?: number;
+  };
   /** Explicit Open/Close Long/Short facts from an execution CSV. */
   position?: {
     direction: "long" | "short";

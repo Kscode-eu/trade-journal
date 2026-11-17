@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { Archive, ArchiveRestore, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { SaxoAccountDetails, type SaxoSnapshot } from "@/components/saxo-account-details";
 import { AccountCreateForm } from "@/components/account-create-form";
 import { FilterBar } from "@/components/filter-bar";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ interface AccountRow {
   lastSyncAt: string | null;
   archivedAt: string | null;
   connected: boolean;
-  snapshot: { equity: number; positions: unknown[] } | null;
+  snapshot: ({ equity: number; positions: unknown[] } & SaxoSnapshot) | null;
 }
 
 export default function AccountsPage() {
@@ -66,13 +67,14 @@ function Accounts() {
       const { sync: outcome } = await action<{
         sync: { inserted: number; skipped: number; skippedReasons: string[] };
       }>(id, { action: "sync" });
-      if (outcome.skipped > 0)
+      if (outcome.skipped > 0 || outcome.skippedReasons.length > 0)
         alert(
-          `Sync finished with ${outcome.inserted} new fills. ${outcome.skipped} broker record(s) were skipped: ${outcome.skippedReasons.join(" ")}`,
+          `Sync finished with ${outcome.inserted} new journal executions. ${outcome.skipped > 0 ? `${outcome.skipped} broker record(s) skipped. ` : ""}${outcome.skippedReasons.join(" ")}`,
         );
     } catch (error) {
       alert(error instanceof Error ? error.message : "Sync failed");
     } finally {
+      refresh();
       setSyncing(null);
     }
   };
@@ -88,6 +90,17 @@ function Accounts() {
           </Button>
         }
       />
+      <div className="px-4 py-3 text-sm">
+        <form action="/api/saxo/connect" method="post">
+          <Button type="submit" variant="outline">
+            Connect / reconnect Saxo
+          </Button>
+        </form>
+        <p className="mt-2 text-muted-foreground">
+          Saxo syncs positions, trade history, account-currency P&amp;L and cash activity. Connect,
+          then use Sync on each account.
+        </p>
+      </div>
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -170,7 +183,14 @@ function Accounts() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {account.snapshot && (
+              {account.broker === "saxo" && (
+                <SaxoAccountDetails
+                  snapshot={account.snapshot}
+                  accountId={account.id}
+                  currency={account.currency}
+                />
+              )}
+              {account.broker !== "saxo" && account.snapshot && (
                 <div className="text-sm">
                   Broker equity:{" "}
                   <span className="tnum font-medium">

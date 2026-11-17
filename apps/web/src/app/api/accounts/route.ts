@@ -24,7 +24,13 @@ export const GET = handler(async (request: Request) => {
     accounts: rows.map(({ credentialsEnc, ...safe }) => ({
       ...safe,
       connected: credentialsEnc !== null,
-      snapshot: safe.snapshotJson ? JSON.parse(safe.snapshotJson) : null,
+      snapshot: safe.snapshotJson
+        ? (() => {
+            const { reports, ...summary } = JSON.parse(safe.snapshotJson);
+            return summary;
+          })()
+        : null,
+      snapshotJson: undefined,
     })),
   });
 });

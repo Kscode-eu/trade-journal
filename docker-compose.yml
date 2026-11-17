@@ -28,6 +28,11 @@ services:
       # Optional: stable encryption secret for broker credentials at rest
       # JOURNAL_SECRET: change-me-too
       JOURNAL_DATA_DIR: /data
+      SAXO_APP_KEY: ${SAXO_APP_KEY:-}
+      SAXO_APP_SECRET: ${SAXO_APP_SECRET:-}
+      SAXO_REDIRECT_URI: ${SAXO_REDIRECT_URI:-http://localhost:3000/api/saxo/callback}
+      SAXO_ENVIRONMENT: ${SAXO_ENVIRONMENT:-live}
+      SAXO_HISTORY_FROM: ${SAXO_HISTORY_FROM:-2000-01-01}
     depends_on:
       postgres:
         condition: service_healthy

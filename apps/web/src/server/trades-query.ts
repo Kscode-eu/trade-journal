@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { matchesFilters, type AnalysisFilters, type AnnotatedTrade } from "@luxalgo/journal-core";
 import { getTimeZone, getMultipliers, getJournalDefaults } from "./settings";
-import { db, trades } from "@/db";
+import { db, trades, accounts } from "@/db";
 
 export type TradeFilters = AnalysisFilters & { accountIds?: string[] };
 
@@ -20,13 +20,29 @@ const parseJsonArray = (value: string | null): string[] => {
 const context = async () => ({
   multipliers: await getMultipliers(),
   defaults: await getJournalDefaults(),
+  saxoRisk: new Map(
+    (
+      await db
+        .select({
+          id: accounts.id,
+          multipliers: sql<
+            Record<string, number>
+          >`coalesce(${accounts.snapshotJson}::jsonb -> 'riskMultipliers', '{}'::jsonb)`,
+        })
+        .from(accounts)
+        .where(eq(accounts.broker, "saxo"))
+    ).map((row) => [row.id, row.multipliers]),
+  ),
 });
 export const rowToTrade = async (
   row: TradeRow,
   config?: Awaited<ReturnType<typeof context>>,
 ): Promise<AnnotatedTrade> => {
   config ??= await context();
-  const multiplier = config.multipliers[row.symbol];
+  const saxo = config.saxoRisk.get(row.accountId);
+  const encodedGroup = row.key.split("|import:")[1];
+  const multiplier =
+    saxo && encodedGroup ? saxo[decodeURIComponent(encodedGroup)] : config.multipliers[row.symbol];
   const defaults = config.defaults;
   const missingMultiplier =
     multiplier == null && ["futures", "option", "forex", "cfd"].includes(row.assetClass ?? "");

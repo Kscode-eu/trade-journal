@@ -1,3 +1,4 @@
+import { syncSaxo } from "./saxo";
 import { connect, listBrokers, type BrokerId } from "@luxalgo/broker-sdk";
 import { and, eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
@@ -50,6 +51,8 @@ export const syncAccount = async (accountId: string): Promise<SyncOutcome> => {
   if (account.kind !== "sync" || !account.credentialsEnc) {
     throw new Error("Account is not broker-connected");
   }
+
+  if (account.broker === "saxo") return syncSaxo(accountId);
 
   const statementTimeZone = isIbkrSyncAccount(account)
     ? canonicalImportTimeZone(await getImportTimeZone())
