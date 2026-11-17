@@ -71,6 +71,30 @@ docker compose up -d --build
 
 Compose waits for PostgreSQL to be healthy before starting the app. The `./data` bind mount retains the local encryption key. PostgreSQL is exposed only on `127.0.0.1:5432` for local development. Set `POSTGRES_PASSWORD` in the root `.env` before first startup to override the development password; use URL-safe characters because Compose includes it in `DATABASE_URL`. Changing it later also requires changing the database role password.
 
+#### Optional MetaTrader 5 bridge
+
+The optional `mt5` Compose profile runs the Windows MT5 terminal under Wine, exports executed
+deals through a read-only Expert Advisor, and sends them to the journal. MT5 credentials stay in
+the private `mt5-data` Docker volume; the journal receives only account identity and deal data.
+
+```bash
+echo "MT5_INGEST_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose --profile mt5 up -d --build
+# MT5 desktop: http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+```
+
+Open the MT5 desktop once, sign in to the broker, and save the login. The container compiles and
+attaches `TradeJournalExporter` automatically. Its first deal creates an import account named
+`MT5 <login> · <server>`; set that account's initial balance on the **Accounts** page. Completed
+deals and open-position entry fills sync about once a minute, with MT5's reported profit,
+commission, fee, and swap retained. Pending orders and price candles are not imported.
+
+The image requires `linux/amd64`; run it on an Intel/AMD Linux host because Wine is unreliable
+under ARM Docker emulation. If the broker requires its own terminal or does not offer `EURUSD`, set
+`MT5_INSTALLER_URL` or `MT5_STARTUP_SYMBOL` in `.env`. Port 6080 is bound to localhost and has no
+VNC password; use an SSH tunnel rather than exposing it publicly. Wine/MT5 is less reliable than a
+Windows VPS, so monitor `docker compose logs mt5` for unattended use.
+
 ### Configuration
 
 | Env var              | Effect                                                                                      |
@@ -83,6 +107,7 @@ Compose waits for PostgreSQL to be healthy before starting the app. The `./data`
 | `OPENAI_API_KEY`     | OpenAI AI key via env instead of the Settings page                                          |
 | `ANTHROPIC_BASE_URL` | Send Anthropic requests through a gateway or proxy (default `https://api.anthropic.com/v1`) |
 | `OPENAI_BASE_URL`    | Send OpenAI requests through a gateway or proxy (default `https://api.openai.com/v1`)       |
+| `MT5_INGEST_TOKEN`   | Shared secret required by the optional MT5 Docker bridge (32+ characters)                   |
 
 Set these in the process environment or in `apps/web/.env.local` for local Next.js runs; the root [`.env.example`](.env.example) documents the values. For Docker, configure the service environment in [`docker-compose.yml`](docker-compose.yml).
 

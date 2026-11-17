@@ -33,9 +33,28 @@ services:
       SAXO_REDIRECT_URI: ${SAXO_REDIRECT_URI:-http://localhost:3000/api/saxo/callback}
       SAXO_ENVIRONMENT: ${SAXO_ENVIRONMENT:-live}
       SAXO_HISTORY_FROM: ${SAXO_HISTORY_FROM:-2000-01-01}
+      MT5_INGEST_TOKEN: ${MT5_INGEST_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+  mt5:
+    profiles: ["mt5"]
+    platform: linux/amd64
+    build: ./integrations/mt5
+    ports:
+      - "127.0.0.1:6080:6080"
+    volumes:
+      - mt5-data:/home/mt5/.wine
+    environment:
+      MT5_API_URL: ${MT5_API_URL:-http://journal:3000/api/mt5/executions}
+      MT5_INGEST_TOKEN: ${MT5_INGEST_TOKEN:-}
+      MT5_INSTALLER_URL: ${MT5_INSTALLER_URL:-https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe}
+      MT5_STARTUP_SYMBOL: ${MT5_STARTUP_SYMBOL:-EURUSD}
+    depends_on:
+      journal:
+        condition: service_started
+    restart: unless-stopped
 volumes:
   postgres-data:
+  mt5-data:
