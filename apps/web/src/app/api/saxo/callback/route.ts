@@ -13,7 +13,7 @@ export const GET = handler(async (request: Request) => {
   jar.delete("saxo_state");
   requireValue(
     state && state === url.searchParams.get("state"),
-    "Saxo login expired. Start again from Accounts.",
+    "Saxo login expired. Start again from Import trades → Broker sync.",
   );
   const code = url.searchParams.get("code");
   requireValue(code && !url.searchParams.has("error"), "Saxo login was cancelled.");

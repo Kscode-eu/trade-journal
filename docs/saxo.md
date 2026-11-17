@@ -19,7 +19,7 @@ The journal reconstructs opening and closing executions from **Saxo position rep
 1. Create a personal LIVE application in the Saxo Developer Portal. Use Code grant and disable trading.
 2. Register the exact callback: `https://YOUR-JOURNAL/api/saxo/callback` (or `http://localhost:3000/api/saxo/callback` for local development).
 3. Set `SAXO_APP_KEY`, `SAXO_APP_SECRET`, and `SAXO_REDIRECT_URI` in the root `.env` file. Docker Compose forwards these to the server. Restart the journal.
-4. Open Accounts → Connect / reconnect Saxo and complete login.
+4. Open Import trades → Broker sync → Saxo → Connect / reconnect Saxo and complete login.
 5. Use Sync on each account. Automatic syncing runs every five minutes while the server is running. Reconnect after a prolonged shutdown if the refresh token has expired.
 
 `SAXO_ENVIRONMENT=sim` uses simulation credentials/endpoints; the default is live. `SAXO_HISTORY_FROM=YYYY-MM-DD` sets the start of available history (default 2000-01-01). Saxo determines actual historical coverage. Shortening an already imported range is blocked to prevent removing saved history. Download all fetched source reports from each account card for inspection.

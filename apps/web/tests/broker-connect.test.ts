@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { listBrokers } from "@luxalgo/broker-sdk";
+import { listBrokers } from "../src/server/brokers";
 
 const state = vi.hoisted(() => ({
   post: vi.fn(),
@@ -10,7 +10,10 @@ const state = vi.hoisted(() => ({
   zone: "America/New_York",
   settingsError: null as string | null,
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: state.push }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("@/components/filter-bar", () => ({ FilterBar: () => null }));
 vi.mock("@/lib/use-api", () => ({
   postJson: (...args: unknown[]) => state.post(...args),
@@ -103,8 +106,8 @@ const connectButton = () =>
     (button) => button.textContent === "Connect & sync",
   )!;
 
-it("exposes exactly the 22 public brokers including the six added integrations", () => {
-  expect(brokers).toHaveLength(22);
+it("exposes SDK brokers and the native Saxo integration", () => {
+  expect(brokers).toHaveLength(23);
   expect([...container.querySelectorAll("option")].map((option) => option.value).sort()).toEqual(
     brokers.map((broker) => broker.id).sort(),
   );
@@ -119,7 +122,7 @@ it("exposes exactly the 22 public brokers including the six added integrations",
     ]),
   );
 });
-it.each(brokers)(
+it.each(brokers.filter((broker) => broker.id !== "saxo"))(
   "renders and submits $id credentials using a mocked connection response",
   async (broker) => {
     await choose(broker.id);
@@ -170,4 +173,14 @@ it("blocks IBKR connection when its effective timezone cannot be loaded", async 
   await fill(brokers.find((broker) => broker.id === "ibkr-flex")!);
   expect(container.textContent).toContain("Could not load the import timezone");
   expect(connectButton().disabled).toBe(true);
+});
+
+it("connects Saxo through OAuth without asking for account credentials", async () => {
+  await choose("saxo");
+  const form = container.querySelector("form")!;
+  expect(form.getAttribute("action")).toBe("/api/saxo/connect");
+  expect(form.getAttribute("method")).toBe("post");
+  expect(form.textContent).toContain("Connect / reconnect Saxo");
+  expect(container.querySelectorAll("input")).toHaveLength(0);
+  expect(state.post).not.toHaveBeenCalled();
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { Archive, ArchiveRestore, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { SaxoAccountDetails, type SaxoSnapshot } from "@/components/saxo-account-details";
 import { AccountCreateForm } from "@/components/account-create-form";
@@ -84,23 +85,17 @@ function Accounts() {
       <FilterBar
         title="Accounts"
         actions={
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus />
-            New account
-          </Button>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" asChild>
+              <Link href="/import?tab=sync">Broker sync</Link>
+            </Button>
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus />
+              New account
+            </Button>
+          </div>
         }
       />
-      <div className="px-4 py-3 text-sm">
-        <form action="/api/saxo/connect" method="post">
-          <Button type="submit" variant="outline">
-            Connect / reconnect Saxo
-          </Button>
-        </form>
-        <p className="mt-2 text-muted-foreground">
-          Saxo syncs positions, trade history, account-currency P&amp;L and cash activity. Connect,
-          then use Sync on each account.
-        </p>
-      </div>
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>

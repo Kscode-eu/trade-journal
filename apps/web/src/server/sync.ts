@@ -1,5 +1,5 @@
 import { syncSaxo } from "./saxo";
-import { connect, listBrokers, type BrokerId } from "@luxalgo/broker-sdk";
+import { connect, type BrokerId } from "@luxalgo/broker-sdk";
 import { and, eq } from "drizzle-orm";
 import type { ImportedExecution } from "@luxalgo/journal-importers";
 import { accounts, db, executions } from "@/db";
@@ -17,8 +17,7 @@ import {
 } from "./ibkr-sync-timezone";
 import { withoutSummaryRows } from "./ibkr-flex-xml-import";
 
-/** All broker connectivity goes through @luxalgo/broker-sdk, never direct API code. */
-export { listBrokers };
+export { listBrokers } from "./brokers";
 
 /** The asset class whose fills a broker's complete position list can vouch for. */
 const CHECKED_ASSET_CLASS: Record<string, string> = { webull: "equity", binance: "futures" };

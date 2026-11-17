@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FileUp, Landmark, PencilLine } from "lucide-react";
 import { AccountPicker } from "@/components/account-picker";
 import { ManualTradeEntry } from "@/components/manual-trade-entry";
@@ -84,11 +84,12 @@ export default function ImportPage() {
 
 function ImportView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   return (
     <div>
       <FilterBar title="Import trades" />
       <div className="mx-auto max-w-3xl p-4">
-        <Tabs defaultValue="file">
+        <Tabs defaultValue={searchParams.get("tab") === "sync" ? "sync" : "file"}>
           <TabsList>
             <TabsTrigger value="file" className="max-sm:px-2 max-sm:text-xs">
               <FileUp className="mr-1.5 hidden h-4 w-4 min-[420px]:block" />
@@ -789,41 +790,55 @@ function BrokerConnect() {
                     : "Loading statement timezone…"}
               </p>
             )}
-            <div>
-              <Label className="mb-1 block text-xs text-muted-foreground">Account name</Label>
-              <Input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={broker.displayName}
-              />
-            </div>
-            {broker.credentials.map((field) => (
-              <div key={field.key}>
-                <Label className="mb-1 block text-xs text-muted-foreground">{field.label}</Label>
-                <Input
-                  aria-label={field.label}
-                  type={field.secret ? "password" : "text"}
-                  value={credentials[field.key] ?? ""}
-                  onChange={(event) =>
-                    setCredentials((c) => ({ ...c, [field.key]: event.target.value }))
+            {broker.id === "saxo" ? (
+              <form action="/api/saxo/connect" method="post">
+                <Button type="submit">Connect / reconnect Saxo</Button>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Positions, trade history, account-currency P&amp;L and cash activity sync every
+                  five minutes. After connecting, use Sync on Accounts for an immediate refresh.
+                </p>
+              </form>
+            ) : (
+              <>
+                <div>
+                  <Label className="mb-1 block text-xs text-muted-foreground">Account name</Label>
+                  <Input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder={broker.displayName}
+                  />
+                </div>
+                {broker.credentials.map((field) => (
+                  <div key={field.key}>
+                    <Label className="mb-1 block text-xs text-muted-foreground">
+                      {field.label}
+                    </Label>
+                    <Input
+                      aria-label={field.label}
+                      type={field.secret ? "password" : "text"}
+                      value={credentials[field.key] ?? ""}
+                      onChange={(event) =>
+                        setCredentials((c) => ({ ...c, [field.key]: event.target.value }))
+                      }
+                      autoComplete="off"
+                    />
+                  </div>
+                ))}
+                {error && <p className="text-sm text-loss">{error}</p>}
+                <Button
+                  onClick={connect}
+                  disabled={
+                    busy ||
+                    broker.credentials.some(
+                      (field) => !/optional/i.test(field.label) && !credentials[field.key]?.trim(),
+                    ) ||
+                    (broker.id === "ibkr-flex" && !isTimeZone(settingsData?.importTimeZone))
                   }
-                  autoComplete="off"
-                />
-              </div>
-            ))}
-            {error && <p className="text-sm text-loss">{error}</p>}
-            <Button
-              onClick={connect}
-              disabled={
-                busy ||
-                broker.credentials.some(
-                  (field) => !/optional/i.test(field.label) && !credentials[field.key]?.trim(),
-                ) ||
-                (broker.id === "ibkr-flex" && !isTimeZone(settingsData?.importTimeZone))
-              }
-            >
-              {busy ? "Connecting…" : "Connect & sync"}
-            </Button>
+                >
+                  {busy ? "Connecting…" : "Connect & sync"}
+                </Button>
+              </>
+            )}
           </>
         )}
       </CardContent>

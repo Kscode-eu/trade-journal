@@ -1,5 +1,5 @@
-import { listBrokers } from "@/server/sync";
+import { listBrokers } from "@/server/brokers";
 import { handler, ok } from "@/server/api";
 
-/** Broker roster straight from @luxalgo/broker-sdk — the connect form renders itself. */
+/** SDK and journal-native broker connections. */
 export const GET = handler(() => ok({ brokers: listBrokers() }));
