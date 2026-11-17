@@ -95,6 +95,30 @@ under ARM Docker emulation. If the broker requires its own terminal or does not 
 VNC password; use an SSH tunnel rather than exposing it publicly. Wine/MT5 is less reliable than a
 Windows VPS, so monitor `docker compose logs mt5` for unattended use.
 
+#### Coolify with MT5
+
+On an `x86_64` Coolify server, deploy the repository with the **Docker Compose** build pack and set
+the Compose file to `/docker-compose.coolify.yml`. This definition enables MT5 without a profile,
+keeps PostgreSQL private, and persists the database, journal key data, and MT5 login in named
+volumes.
+
+Set `POSTGRES_PASSWORD`, `JOURNAL_PASSWORD`, `JOURNAL_SECRET`, and `MT5_INGEST_TOKEN` in Coolify
+before the first deployment. Use URL-safe values for `POSTGRES_PASSWORD`; `openssl rand -hex 32`
+generates suitable values for the database password, journal secret, and MT5 token. Assign the
+journal domain to the `journal` service on internal port `3000`, for example
+`https://journal.example.com:3000`. Do not assign domains to `postgres` or `mt5`.
+
+Port 6080 remains bound to the server's loopback interface. Open the MT5 desktop through an SSH
+tunnel:
+
+```bash
+ssh -N -L 6080:127.0.0.1:6080 user@your-server
+# http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+```
+
+Do not delete the Coolify persistent storage or use `docker compose down -v` unless you intend to
+erase the journal database and saved MT5 login.
+
 ### Configuration
 
 | Env var              | Effect                                                                                      |

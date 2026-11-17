@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: journal
+      POSTGRES_USER: journal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal -d journal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+  journal:
+    build: .
+    expose:
+      - "3000"
+    volumes:
+      - journal-data:/data
+    environment:
+      DATABASE_URL: postgresql://journal:${POSTGRES_PASSWORD}@postgres:5432/journal
+      JOURNAL_PASSWORD: ${JOURNAL_PASSWORD}
+      JOURNAL_SECRET: ${JOURNAL_SECRET}
+      JOURNAL_DATA_DIR: /data
+      SAXO_APP_KEY: ${SAXO_APP_KEY:-}
+      SAXO_APP_SECRET: ${SAXO_APP_SECRET:-}
+      SAXO_REDIRECT_URI: ${SAXO_REDIRECT_URI:-http://localhost:3000/api/saxo/callback}
+      SAXO_ENVIRONMENT: ${SAXO_ENVIRONMENT:-live}
+      SAXO_HISTORY_FROM: ${SAXO_HISTORY_FROM:-2000-01-01}
+      MT5_INGEST_TOKEN: ${MT5_INGEST_TOKEN}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  mt5:
+    platform: linux/amd64
+    build: ./integrations/mt5
+    ports:
+      - "127.0.0.1:${MT5_NOVNC_PORT:-6080}:6080"
+    volumes:
+      - mt5-data:/home/mt5/.wine
+    environment:
+      MT5_API_URL: http://journal:3000/api/mt5/executions
+      MT5_INGEST_TOKEN: ${MT5_INGEST_TOKEN}
+      MT5_INSTALLER_URL: ${MT5_INSTALLER_URL:-https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe}
+      MT5_STARTUP_SYMBOL: ${MT5_STARTUP_SYMBOL:-EURUSD}
+    depends_on:
+      journal:
+        condition: service_started
+    restart: unless-stopped
+volumes:
+  postgres-data:
+  journal-data:
+  mt5-data:
