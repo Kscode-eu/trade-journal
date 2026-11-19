@@ -6,6 +6,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { FILTER_KEYS } from "@luxalgo/journal-core";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
+  Globe,
   BarChart3,
   BookOpen,
   BookText,
@@ -37,6 +38,7 @@ const NAV = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/journal", label: "Daily journal", icon: NotebookPen },
   { href: "/trades", label: "Trades", icon: ListOrdered },
+  { href: "/markets", label: "Markets", icon: Globe },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/prop-firms", label: "Prop firms", icon: Landmark },
   { href: "/notebook", label: "Notebook", icon: BookText },
@@ -157,7 +159,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {NAV.map(({ href, label, icon }) => (
         <NavLink
           key={href}
-          href={href === "/prop-firms" ? href : filterQuery.size ? `${href}?${filterQuery}` : href}
+          href={
+            href === "/prop-firms" || href === "/markets"
+              ? href
+              : filterQuery.size
+                ? `${href}?${filterQuery}`
+                : href
+          }
           label={label}
           icon={icon}
           collapsed={collapsed}

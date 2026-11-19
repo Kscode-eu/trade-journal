@@ -67,7 +67,14 @@ function JournalDay({ date }: { date: string }) {
   const m = data?.metrics;
   return (
     <div>
-      <FilterBar title={`Journal · ${date}`} />
+      <FilterBar
+        title={`Journal · ${date}`}
+        actions={
+          <Link href="/markets?view=calendar" className="text-xs underline underline-offset-4">
+            Current market context
+          </Link>
+        }
+      />
       <div className="grid gap-3 p-4 xl:grid-cols-3">
         <div className="min-w-0 space-y-3 xl:col-span-2">
           {m && m.closedTrades > 0 ? (

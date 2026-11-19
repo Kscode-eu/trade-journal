@@ -1,0 +1,21 @@
+services:
+  journal:
+    build:
+      target: dev
+    command: sh -c "pnpm install --frozen-lockfile && pnpm dev"
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+    restart: "no"
+    volumes:
+      - .:/repo
+      - node-modules:/repo/node_modules
+      - web-node-modules:/repo/apps/web/node_modules
+      - importers-node-modules:/repo/packages/importers/node_modules
+      - next-cache:/repo/apps/web/.next
+
+volumes:
+  node-modules:
+  web-node-modules:
+  importers-node-modules:
+  next-cache:

@@ -1,5 +1,5 @@
 # Self-hosted trade journal — app container with a PostgreSQL service.
-FROM node:22-slim AS builder
+FROM node:22-slim AS dev
 RUN corepack enable
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -8,6 +8,10 @@ COPY apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
 COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
+EXPOSE 3000
+CMD ["pnpm", "dev"]
+
+FROM dev AS builder
 RUN pnpm --filter web build
 
 FROM node:22-slim AS runner

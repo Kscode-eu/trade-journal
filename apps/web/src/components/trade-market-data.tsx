@@ -16,6 +16,7 @@ import { replayFrame } from "@/lib/trade-replay";
 import { useApi } from "@/lib/use-api";
 import { fmtMoney } from "@/lib/utils";
 import { TradeChart, type ChartExecution, type ChartTrade } from "./trade-chart";
+import { TradingViewChart } from "./tradingview-chart";
 import { usePrivacy } from "./privacy";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
@@ -94,6 +95,7 @@ export function TradeMarketData({
   };
   return (
     <div className="space-y-3">
+      <TradingViewChart trade={trade} executions={executions} />
       <Card>
         <CardHeader>
           <CardTitle>Market data & replay</CardTitle>

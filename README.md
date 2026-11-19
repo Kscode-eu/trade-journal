@@ -71,6 +71,15 @@ docker compose up -d --build
 
 Compose waits for PostgreSQL to be healthy before starting the app. The `./data` bind mount retains the local encryption key. PostgreSQL is exposed only on `127.0.0.1:5432` for local development. Set `POSTGRES_PASSWORD` in the root `.env` before first startup to override the development password; use URL-safe characters because Compose includes it in `DATABASE_URL`. Changing it later also requires changing the database role password.
 
+For development with hot reload, run the development override instead:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# Edit files locally, then open http://localhost:3000
+```
+
+The override bind-mounts this checkout into the app container. Container-only volumes keep Linux `node_modules` and the Next.js build cache separate from files on the host. Stop it with `Ctrl+C`, followed by `docker compose -f docker-compose.yml -f docker-compose.dev.yml down`. Do not add `-v` unless you intend to delete the PostgreSQL data volume.
+
 ### Configuration
 
 | Env var              | Effect                                                                                      |
