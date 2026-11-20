@@ -1,5 +1,14 @@
 import { and, eq } from "drizzle-orm";
-import { db, attachments, trades, notes, missedTrades, propAccounts, propEntries } from "@/db";
+import {
+  db,
+  attachments,
+  trades,
+  notes,
+  playbooks,
+  missedTrades,
+  propAccounts,
+  propEntries,
+} from "@/db";
 import { handler, ok, requireValue } from "@/server/api";
 import { newId, nowIso } from "@/server/ids";
 import { attachmentMime, MAX_ATTACHMENT_SIZE } from "@/lib/attachment-validation";
@@ -14,6 +23,8 @@ async function owner(type: string, id: string) {
     )[0];
   if (type === "trade")
     return !!(await db.select({ key: trades.key }).from(trades).where(eq(trades.key, id)))[0];
+  if (type === "playbook")
+    return !!(await db.select({ id: playbooks.id }).from(playbooks).where(eq(playbooks.id, id)))[0];
   if (type === "note")
     return !!(await db.select({ id: notes.id }).from(notes).where(eq(notes.id, id)))[0];
   if (type === "missed")
@@ -60,7 +71,7 @@ export const POST = handler(async (request: Request) => {
   );
   const bytes = Buffer.from(await file.arrayBuffer()),
     mime = attachmentMime(bytes);
-  requireValue(mime, "Supported files: PNG, JPEG, WebP and PDF.");
+  requireValue(mime, "Supported files: PNG, JPEG, WebP, PDF and Excalidraw drawings.");
   const id = newId();
   await db.insert(attachments).values({
     id,

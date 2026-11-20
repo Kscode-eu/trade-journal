@@ -363,6 +363,9 @@ function Notebook() {
 
 function NoteEditor({ note, onChanged }: { note: NoteRow; onChanged: () => void }) {
   const [title, setTitle] = useState(note.title);
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState("");
+  const [playbookId, setPlaybookId] = useState<string | null>(null);
   const [content, setContent] = useState(note.content);
   const [mode, setMode] = useState<"edit" | "preview">(note.content.trim() ? "preview" : "edit");
   const editor = useRef<RichEditorHandle>(null);
@@ -434,6 +437,49 @@ function NoteEditor({ note, onChanged }: { note: NoteRow; onChanged: () => void 
             Save now
           </Button>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={copying || !!playbookId}
+            onClick={async () => {
+              setCopying(true);
+              setCopyError("");
+              try {
+                const result = await postJson<{ id: string }>("/api/playbooks", {
+                  name: title.trim() || "Untitled playbook",
+                  description: content,
+                  sourceNoteId: note.id,
+                });
+                setPlaybookId(result.id);
+              } catch (error) {
+                setCopyError(error instanceof Error ? error.message : "Could not create playbook");
+              } finally {
+                setCopying(false);
+              }
+            }}
+          >
+            {copying ? "Creating…" : playbookId ? "Playbook created" : "Create playbook"}
+          </Button>
+          {playbookId ? (
+            <a
+              className="text-sm underline"
+              href={`/playbooks?playbook=${encodeURIComponent(playbookId)}`}
+            >
+              Open playbook
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              Copy this note and its attachments into a playbook.
+            </span>
+          )}
+        </div>
+        {copyError && (
+          <p role="alert" className="text-sm text-destructive">
+            {copyError}
+          </p>
+        )}
         <ReviewExport document={{ title: title || "Journal note", lines: [content] }} />
         <Attachments type="note" id={note.id} />
       </CardContent>

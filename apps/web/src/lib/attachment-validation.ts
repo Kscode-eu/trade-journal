@@ -1,3 +1,4 @@
+import { EXCALIDRAW_MIME, isExcalidrawScene } from "./excalidraw-format";
 export const MAX_ATTACHMENT_SIZE = 8 * 1024 * 1024;
 /** Determine the allowlisted type from bytes, not a filename or browser-supplied MIME type. */
 export function attachmentMime(bytes: Uint8Array): string | null {
@@ -10,5 +11,14 @@ export function attachmentMime(bytes: Uint8Array): string | null {
   )
     return "image/webp";
   if (starts([0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf";
+  try {
+    if (
+      bytes.length <= MAX_ATTACHMENT_SIZE &&
+      isExcalidrawScene(JSON.parse(new TextDecoder().decode(bytes)))
+    )
+      return EXCALIDRAW_MIME;
+  } catch {
+    /* Not a drawing. */
+  }
   return null;
 }

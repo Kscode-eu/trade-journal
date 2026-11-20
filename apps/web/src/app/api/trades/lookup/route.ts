@@ -8,6 +8,7 @@ export const GET = handler(async (request: Request) => {
   const matches = await db
     .select({
       key: trades.key,
+      playbookId: trades.playbookId,
       symbol: trades.symbol,
       direction: trades.direction,
       openedAt: trades.openedAt,
