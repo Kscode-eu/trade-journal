@@ -7,7 +7,7 @@ import type {
   ExcalidrawInitialDataState,
 } from "@excalidraw/excalidraw/types";
 import "@excalidraw/excalidraw/index.css";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { EXCALIDRAW_MIME } from "@/lib/excalidraw-format";
@@ -114,28 +114,35 @@ export default function DrawingEditor({
       }}
     >
       <DialogContent
-        className="flex h-[90dvh] max-w-[96vw] flex-col overflow-hidden"
+        className="left-0 top-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:p-0"
+        style={{ maxHeight: "100dvh" }}
         onInteractOutside={(event) => event.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle>{attachment ? "Edit drawing" : "New Excalidraw drawing"}</DialogTitle>
-          <DialogDescription>
-            Sketch your setup, then save it with this page. You can reopen it anytime.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex gap-2">
+        <DialogTitle className="sr-only">
+          {attachment ? "Edit drawing" : "New Excalidraw drawing"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Sketch your setup, then save it with this page. You can reopen it anytime.
+        </DialogDescription>
+        <div className="flex shrink-0 items-center gap-2 border-b p-2 pr-12">
           <Input
             aria-label="Drawing name"
+            className="h-8 min-w-0 flex-1 sm:max-w-sm"
             value={name}
             disabled={busy}
             onChange={(event) => setName(event.target.value)}
           />
-          <Button disabled={busy || loading} onClick={() => void save()}>
+          <Button
+            size="sm"
+            className="shrink-0"
+            disabled={busy || loading}
+            onClick={() => void save()}
+          >
             {busy ? "Saving…" : "Save drawing"}
           </Button>
         </div>
         {failure && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="shrink-0 px-3 py-2 text-sm text-destructive">
             {failure}
           </p>
         )}
@@ -144,7 +151,7 @@ export default function DrawingEditor({
             {failure ? "Close this dialog and try again." : "Loading drawing…"}
           </p>
         ) : (
-          <div className="min-h-0 flex-1" inert={busy}>
+          <div className="min-h-0 w-full flex-1" inert={busy}>
             <Excalidraw
               initialData={initialData}
               excalidrawAPI={(value) => {
