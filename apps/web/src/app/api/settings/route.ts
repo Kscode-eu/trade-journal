@@ -1,7 +1,9 @@
+import { DEFAULT_AI_NOTE_PROMPT, validAiNotePrompt } from "@/lib/ai-note";
 import { db, accounts } from "@/db";
 import { rebuildAccount } from "@/server/rebuild";
 import { handler, ok, requireValue } from "@/server/api";
 import {
+  getSetting,
   getMultipliers,
   getCurrencyConversion,
   getTimeZone,
@@ -21,6 +23,7 @@ import { parseCurrencyConversion, type CurrencyConversion } from "@/lib/currenci
 
 export const GET = handler(async () =>
   ok({
+    aiNotePrompt: (await getSetting("aiNotePrompt")) ?? DEFAULT_AI_NOTE_PROMPT,
     timeZone: await getTimeZone(),
     importTimeZone: await getImportTimeZone(),
     multipliers: await getMultipliers(),
@@ -30,6 +33,7 @@ export const GET = handler(async () =>
 );
 
 interface SettingsBody {
+  aiNotePrompt?: string;
   timeZone?: string;
   importTimeZone?: string;
   multipliers?: Record<string, number>;
@@ -47,6 +51,11 @@ interface SettingsBody {
 export const PATCH = handler(async (request: Request) => {
   const body = (await request.json()) as SettingsBody;
   requireValue(body && typeof body === "object" && !Array.isArray(body), "Enter valid settings.");
+  if (body.aiNotePrompt !== undefined)
+    requireValue(
+      validAiNotePrompt(body.aiNotePrompt),
+      "Enter a prompt up to 8,000 characters containing {{dictation}}.",
+    );
   let conversion: CurrencyConversion | undefined;
   if (body.currencyConversion !== undefined) {
     try {
@@ -143,6 +152,7 @@ export const PATCH = handler(async (request: Request) => {
     }
     if (compatibleBaseUrl)
       await setCompatibleBaseUrl(compatibleBaseUrl, body.compatibleKey !== undefined);
+    if (body.aiNotePrompt !== undefined) await setSetting("aiNotePrompt", body.aiNotePrompt.trim());
     if (body.aiProvider !== undefined) await setSetting("aiProvider", body.aiProvider);
     if (body.aiModel !== undefined) await setSetting(aiModelSetting(provider), body.aiModel.trim());
   });

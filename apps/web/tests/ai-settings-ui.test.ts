@@ -115,3 +115,30 @@ it("keeps hosted providers free of a server URL", async () => {
   await act(async () => saveButton().click());
   expect(state.post.mock.calls[0]![1]).toEqual({ aiProvider: "openai", aiModel: "gpt-4.1-mini" });
 });
+
+it("saves the dictation template independently of provider credentials", async () => {
+  await render({
+    ...settings("anthropic"),
+    aiNotePrompt: "Clean up: {{dictation}}",
+  } as AiSettingsPayload);
+  const textarea = container.querySelector<HTMLTextAreaElement>("#ai-note-prompt")!;
+  expect(textarea.value).toBe("Clean up: {{dictation}}");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(
+      textarea,
+      "Use bullets: {{dictation}}",
+    );
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const save = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (b) => b.textContent === "Save note prompt",
+  )!;
+  expect(save.disabled).toBe(false);
+  await act(async () => save.click());
+  expect(state.post).toHaveBeenCalledWith(
+    "/api/settings",
+    { aiNotePrompt: "Use bullets: {{dictation}}" },
+    "PATCH",
+  );
+  expect(container.textContent).toContain("Note prompt saved.");
+});

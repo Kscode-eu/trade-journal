@@ -1,5 +1,7 @@
 "use client";
 import { useImperativeHandle, useRef, useState, type Ref } from "react";
+import type { AiNoteAnchor } from "@/lib/ai-note-context";
+import { AiStructureNote } from "./ai-structure-note";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -70,6 +72,7 @@ export function RichEditor({
   onModeChange,
   showModeToggle = true,
   editorRef,
+  aiAnchor,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -79,6 +82,7 @@ export function RichEditor({
   onModeChange?: (mode: "preview" | "edit") => void;
   showModeToggle?: boolean;
   editorRef?: Ref<RichEditorHandle>;
+  aiAnchor?: AiNoteAnchor;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null),
     [localPreview, setLocalPreview] = useState(() =>
@@ -306,6 +310,12 @@ export function RichEditor({
           placeholder={placeholder}
         />
       )}
+      <AiStructureNote
+        key={JSON.stringify(aiAnchor ?? {})}
+        value={value}
+        onChange={onChange}
+        anchor={aiAnchor}
+      />
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}

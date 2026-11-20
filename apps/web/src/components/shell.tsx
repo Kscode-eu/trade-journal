@@ -7,6 +7,7 @@ import { FILTER_KEYS } from "@luxalgo/journal-core";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
   Globe,
+  Sparkles,
   BarChart3,
   BookOpen,
   BookText,
@@ -37,6 +38,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/journal", label: "Daily journal", icon: NotebookPen },
+  { href: "/weekly-review", label: "Weekly review", icon: Sparkles },
   { href: "/trades", label: "Trades", icon: ListOrdered },
   { href: "/markets", label: "Markets", icon: Globe },
   { href: "/reports", label: "Reports", icon: BarChart3 },

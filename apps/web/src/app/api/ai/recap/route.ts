@@ -1,14 +1,21 @@
+import { createHash } from "node:crypto";
+import { AI_REFLECTION_SYSTEM } from "@/lib/ai-instructions";
+import { getAiModel, getAiProvider } from "@/server/settings";
 import { eq } from "drizzle-orm";
 import { computeMetrics, dayKeyOf } from "@luxalgo/journal-core";
 import { db, journalDays } from "@/db";
-import { bad, handler, ok } from "@/server/api";
+import { bad, handler, ok, requireValue } from "@/server/api";
 import { runAi } from "@/server/ai";
 import { queryTrades } from "@/server/trades-query";
 import { accountContext, readAiRequest } from "@/server/ai-scope";
 
 /** Generate a session recap for one trading day from the day's actual trades. */
 export const POST = handler(async (request: Request) => {
-  const scope = await readAiRequest(await request.json(), "date");
+  const raw = await request.json();
+  requireValue(raw && typeof raw === "object" && !Array.isArray(raw), "Invalid AI request");
+  const { preview: inspect, fingerprint, ...body } = raw;
+  requireValue(inspect === undefined || typeof inspect === "boolean", "Invalid preview option");
+  const scope = await readAiRequest(body, "date");
   const { timeZone, filters } = scope;
   const date = scope.date!;
 
@@ -37,8 +44,7 @@ export const POST = handler(async (request: Request) => {
     )
     .join("\n");
 
-  const recap = await runAi(
-    `Write a session recap for ${date} in first person ("I"), 120-200 words, markdown with a
+  const prompt = `Write a session recap for ${date} in first person ("I"), 120-200 words, markdown with a
 short "**Keep**" and "**Fix**" list at the end.
 
 ${scope.context}
@@ -51,8 +57,44 @@ fees ${metrics.fees.toFixed(2)}.
 Trades:
 ${tradeLines}
 
-${existingNote ? `The trader's own note so far (respect it, build on it):\n${existingNote}` : ""}`,
-  );
+${existingNote ? `The trader's own note so far (respect it, build on it):\n${existingNote}` : ""}`;
+  const sources = [
+    { id: "scope", label: "Selected accounts, filters and timezone", content: scope.context },
+    {
+      id: "trades",
+      label: `${dayTrades.length} closed trades and recorded annotations`,
+      content: tradeLines,
+    },
+    ...(existingNote
+      ? [
+          {
+            id: "journal",
+            label: `Saved shared daily journal · ${date}`,
+            href: `/journal/${date}`,
+            content: existingNote,
+          },
+        ]
+      : []),
+  ];
+  const content = {
+    provider: await getAiProvider(),
+    model: "",
+    system: AI_REFLECTION_SYSTEM,
+    prompt,
+    sources,
+  };
+  content.model = await getAiModel(content.provider);
+  const input = {
+    ...content,
+    fingerprint: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
+  };
+  if (inspect) return ok(input);
+  if (fingerprint !== undefined)
+    requireValue(
+      fingerprint === input.fingerprint,
+      "The recap data or AI settings changed. Preview AI data again.",
+    );
+  const recap = await runAi(prompt);
 
-  return ok({ recap, scope: scope.scope });
+  return ok({ recap, scope: scope.scope, input });
 });

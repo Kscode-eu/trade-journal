@@ -222,7 +222,12 @@ function JournalDay({ date }: { date: string }) {
               />
             </div>
             {data ? (
-              <RichEditor editorRef={noteEditor} value={noteValue} onChange={scheduleSave} />
+              <RichEditor
+                aiAnchor={{ date }}
+                editorRef={noteEditor}
+                value={noteValue}
+                onChange={scheduleSave}
+              />
             ) : error ? (
               <p role="alert" className="text-sm text-destructive">
                 {error}

@@ -1,3 +1,4 @@
+import { AI_REFLECTION_SYSTEM } from "@/lib/ai-instructions";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -19,12 +20,7 @@ import { AI_PROVIDER_NAMES, type AiProvider } from "@/lib/ai-settings";
 export const aiConfigured = async (): Promise<boolean> =>
   await aiProviderConfigured(await getAiProvider());
 
-const SYSTEM = `You are the reflection layer of a trader's journal.
-You see only the trader's own recorded data — trades, stats, and notes. Ground every
-statement in those numbers; never invent trades, prices, or market context you weren't given.
-Be direct and specific like a good trading coach: name the behavior, cite the numbers,
-say what to keep and what to fix. No platitudes, no disclaimers about trading being risky —
-the trader knows. Keep it tight.`;
+const SYSTEM = AI_REFLECTION_SYSTEM;
 
 const languageModel = async (provider: AiProvider, apiKey: string | null, model: string) => {
   if (provider === "compatible")
@@ -40,7 +36,11 @@ const languageModel = async (provider: AiProvider, apiKey: string | null, model:
     : createAnthropic({ apiKey: apiKey! })(model);
 };
 
-export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<string> => {
+export const runAi = async (
+  prompt: string,
+  maxOutputTokens = 1200,
+  system = SYSTEM,
+): Promise<string> => {
   const provider = await getAiProvider();
   if (!(await aiProviderConfigured(provider))) {
     throw new Error(
@@ -49,17 +49,22 @@ export const runAi = async (prompt: string, maxOutputTokens = 1200): Promise<str
         : `AI is not configured — add your ${AI_PROVIDER_NAMES[provider]} API key in Settings.`,
     );
   }
+  const truncated = new Error(
+    "AI output was truncated. Try a shorter note or a more concise prompt.",
+  );
   try {
     const result = await generateText({
       model: await languageModel(provider, await getAiKey(provider), await getAiModel(provider)),
       ...(provider === "openai" ? { providerOptions: { openai: { store: false } } } : {}),
-      system: SYSTEM,
+      system,
       prompt,
       maxOutputTokens,
     });
+    if (system !== SYSTEM && result.finishReason === "length") throw truncated;
     if (!result.text.trim()) throw new Error("AI returned no text. Check the model or try again.");
     return result.text;
   } catch (error) {
+    if (error === truncated) throw error;
     if (RetryError.isInstance(error)) error = error.lastError;
     // Provider error messages can contain key fragments or request data. Never relay them.
     if (APICallError.isInstance(error)) {

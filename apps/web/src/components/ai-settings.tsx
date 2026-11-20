@@ -1,5 +1,6 @@
 "use client";
 
+import { AiNoteSettings } from "./ai-note-settings";
 import { useEffect, useState } from "react";
 import {
   AI_DEFAULT_MODELS,
@@ -216,6 +217,7 @@ export function AiSettings() {
             </Button>
           )}
         </div>
+        <AiNoteSettings />
       </CardContent>
     </Card>
   );

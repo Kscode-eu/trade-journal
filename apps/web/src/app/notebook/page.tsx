@@ -1,7 +1,8 @@
 "use client";
 import { OptionSelect } from "@/components/ui/option-select";
 
-import { Suspense, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ArrowLeft, FolderPlus, Plus, Search, Trash2 } from "lucide-react";
 import { FilterBar } from "@/components/filter-bar";
 import { VoiceNote } from "@/components/voice-note";
@@ -39,9 +40,17 @@ export default function NotebookPage() {
 }
 
 function Notebook() {
+  const linkedNote = useSearchParams()?.get("note") ?? null;
   const [folder, setFolder] = useState("all");
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(linkedNote);
+  useEffect(() => {
+    if (linkedNote) {
+      setSelectedId(linkedNote);
+      setFolder("all");
+      setSearch("");
+    }
+  }, [linkedNote]);
   const [folderOpen, setFolderOpen] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [folderError, setFolderError] = useState("");
@@ -408,6 +417,7 @@ function NoteEditor({ note, onChanged }: { note: NoteRow; onChanged: () => void 
           </Button>
         </div>
         <RichEditor
+          aiAnchor={{ noteId: note.id }}
           editorRef={editor}
           mode={mode}
           onModeChange={setMode}

@@ -449,6 +449,7 @@ function AnnotationsCard({
             />
           </div>
           <RichEditor
+            aiAnchor={{ tradeKey: trade.key }}
             editorRef={noteEditor}
             value={notes}
             onChange={(value) => {
