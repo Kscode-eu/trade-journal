@@ -71,6 +71,16 @@ docker compose up -d --build
 
 Compose waits for PostgreSQL to be healthy before starting the app. The `./data` bind mount retains the local encryption key. PostgreSQL is exposed only on `127.0.0.1:5432` for local development. Set `POSTGRES_PASSWORD` in the root `.env` before first startup to override the development password; use URL-safe characters because Compose includes it in `DATABASE_URL`. Changing it later also requires changing the database role password.
 
+The production container starts with a short permission setup for `JOURNAL_DATA_DIR`, then runs the app as the unprivileged `node` user. This handles root-owned bind mounts created by Docker or Coolify. In Coolify, keep persistent storage mounted at `/data` and rebuild/redeploy after updating the image. If you explicitly override the container user, make sure that user can write the mounted directory and read its existing `.secret` file.
+
+If an older deployment reports `EACCES: permission denied, open '/data/.secret'`, repair permissions from the Docker host (replace `<journal-container>` with the app container name):
+
+```bash
+docker exec --user root <journal-container> sh -c 'chown -R node:node /data && if [ -f /data/.secret ]; then chmod 600 /data/.secret; fi'
+```
+
+Retry saving the settings afterward. Preserve `.secret`: deleting it or switching to a new `JOURNAL_SECRET` makes previously encrypted credentials unreadable.
+
 For development with hot reload, run the development override instead:
 
 ```bash
