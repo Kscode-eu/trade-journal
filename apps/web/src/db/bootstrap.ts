@@ -201,11 +201,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS import_batch_unique ON import_batches(account_
 `;
 
 /** Serialize bootstrap across application workers and commit the schema atomically. */
-export async function initializeDatabase(pool: Pool): Promise<void> {
+export async function initializeDatabase(pool: Pool, tenantSchema?: string): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(734821906)");
+    if (tenantSchema) {
+      if (!/^(public|user_[a-f0-9]{56})$/.test(tenantSchema))
+        throw new Error("Invalid journal schema");
+      await client.query(`CREATE SCHEMA IF NOT EXISTS "${tenantSchema}"`);
+      await client.query("SELECT set_config('search_path', $1, true)", [tenantSchema]);
+    }
     await client.query(BOOTSTRAP_SQL);
     await client.query(`
       ALTER TABLE folders ADD COLUMN IF NOT EXISTS deleted_at TEXT;

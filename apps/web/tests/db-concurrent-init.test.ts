@@ -9,14 +9,14 @@ it("bootstraps concurrently and preserves records on repeated initialization", a
     () => new Pool({ connectionString: process.env.DATABASE_URL, max: 1 }),
   );
   try {
-    await Promise.all(pools.map(initializeDatabase));
+    await Promise.all(pools.map((pool) => initializeDatabase(pool)));
     expect((await testPool.query("SELECT count(*)::int AS n FROM folders")).rows[0]).toEqual({
       n: 5,
     });
     await testPool.query(
       "INSERT INTO accounts (id, name, kind, created_at) VALUES ('kept', 'Kept', 'manual', '2026-01-01')",
     );
-    await Promise.all(pools.map(initializeDatabase));
+    await Promise.all(pools.map((pool) => initializeDatabase(pool)));
     expect((await testPool.query("SELECT name FROM accounts WHERE id = 'kept'")).rows[0].name).toBe(
       "Kept",
     );

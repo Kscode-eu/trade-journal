@@ -1,3 +1,4 @@
+import { auth0Enabled } from "@/lib/auth-mode";
 import { Suspense } from "react";
 import type { Metadata } from "next";
 import "./globals.css";
@@ -6,6 +7,9 @@ import { PrivacyProvider } from "@/components/privacy";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+
+// Authentication mode is runtime configuration, including standalone Docker images.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Trade Journal",
@@ -24,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Suspense>
             <ThemeProvider>
               <PrivacyProvider>
-                <Shell>{children}</Shell>
+                <Shell auth0Enabled={auth0Enabled()}>{children}</Shell>
               </PrivacyProvider>
             </ThemeProvider>
           </Suspense>

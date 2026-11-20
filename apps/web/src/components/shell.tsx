@@ -89,7 +89,13 @@ function NavLink({
   );
 }
 
-export function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({
+  children,
+  auth0Enabled = false,
+}: {
+  children: React.ReactNode;
+  auth0Enabled?: boolean;
+}) {
   const pathname = usePathname();
   const search = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -201,6 +207,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </a>
       </div>
       <div>Not investment advice.</div>
+      {auth0Enabled && (
+        <a href="/auth/logout" className="block underline underline-offset-2">
+          Sign out
+        </a>
+      )}
     </div>
   );
   return (

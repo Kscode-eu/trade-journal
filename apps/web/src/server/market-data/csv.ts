@@ -1,3 +1,4 @@
+import { journalSchema } from "@/server/tenant";
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db, marketCsvDatasets, tradeExcursions } from "@/db";
@@ -9,10 +10,11 @@ import { result } from "./http";
 const decoded = new Map<string, MarketBar[]>();
 let decodedCount = 0;
 async function datasetBars(id: string) {
-  const cached = decoded.get(id);
+  const cacheKey = `${journalSchema() ?? "local"}:${id}`;
+  const cached = decoded.get(cacheKey);
   if (cached) {
-    decoded.delete(id);
-    decoded.set(id, cached);
+    decoded.delete(cacheKey);
+    decoded.set(cacheKey, cached);
     return cached;
   }
   const row = (
@@ -23,7 +25,7 @@ async function datasetBars(id: string) {
   )[0];
   if (!row) throw new MarketDataError("CSV dataset was removed.");
   const bars = JSON.parse(row.json) as MarketBar[];
-  decoded.set(id, bars);
+  decoded.set(cacheKey, bars);
   decodedCount += bars.length;
   while (decodedCount > 200_000) {
     const oldest = decoded.keys().next().value!;
@@ -97,10 +99,11 @@ export async function removeCsvDataset(id: string) {
       .where(sql`(${tradeExcursions.estimateJson}::jsonb ->> 'datasetId') = ${id}`);
     await tx.delete(marketCsvDatasets).where(eq(marketCsvDatasets.id, id));
   });
-  const bars = decoded.get(id);
+  const cacheKey = `${journalSchema() ?? "local"}:${id}`;
+  const bars = decoded.get(cacheKey);
   if (bars) {
     decodedCount -= bars.length;
-    decoded.delete(id);
+    decoded.delete(cacheKey);
   }
 }
 export const marketCsv: MarketDataProvider = {

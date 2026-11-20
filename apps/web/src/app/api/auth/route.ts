@@ -1,9 +1,11 @@
+import { auth0Enabled } from "@/lib/auth-mode";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, passwordConfigured, sessionToken, verifyPassword } from "@/server/auth";
 import { bad, handler, ok } from "@/server/api";
 
 export const POST = handler(
   async (request: Request) => {
+    if (auth0Enabled()) return bad("Use Auth0 to sign in", 400);
     if (!passwordConfigured()) return ok({ authenticated: true });
     const { password } = (await request.json()) as { password?: string };
     if (typeof password !== "string" || !password || !verifyPassword(password))

@@ -1,3 +1,6 @@
+import { auth0Enabled } from "@/lib/auth-mode";
+import { getAuth0 } from "./auth0";
+import { withJournalUser } from "./tenant";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { AUTH_COOKIE, passwordConfigured, verifySession } from "./auth";
@@ -24,6 +27,11 @@ export const handler =
   ) =>
   async (...args: A): Promise<Response> => {
     try {
+      if (!options.public && auth0Enabled()) {
+        const session = await getAuth0().getSession();
+        if (!session?.user?.sub) return bad("Unauthorized", 401);
+        return await withJournalUser(session.user.sub, () => fn(...args));
+      }
       if (!options.public && passwordConfigured()) {
         const token = (await cookies()).get(AUTH_COOKIE)?.value;
         if (!verifySession(token)) return bad("Unauthorized", 401);

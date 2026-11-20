@@ -358,3 +358,7 @@ TEST_DATABASE_URL=postgresql://journal:journal@localhost:5432/journal_test pnpm 
 ```
 
 The test role must be able to create schemas. Each test file uses an isolated schema, removed after its tests; `TEST_DATABASE_URL` is separate from the app's `DATABASE_URL`. CI provisions PostgreSQL automatically.
+
+### Multi-user authentication
+
+For private per-user journals with Auth0 login, see [Auth0 multi-user setup](docs/auth0-multi-user.md). Existing local/password mode is still supported.
